@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.12.2] - 2026-09-13
 
 ### Changed
 - **Jellyfin mounts the whole data root read-only** (`${MEDIA_ROOT}:/data:ro` instead of `${MEDIA_ROOT}/media:/data/media:ro`) so a Books library can index the `other` download lane — an audiobook grabbed from Prowlarr's search page appears in Jellyfin without being moved. Existing library paths under `/data/media` are unchanged. Recreate Jellyfin after pulling; on 12.0 wait for `Startup complete` in the log, not the healthcheck.
