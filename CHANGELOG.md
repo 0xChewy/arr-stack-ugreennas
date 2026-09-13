@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Image bumps** — `cloudflared` 2026.9.0 → 2026.9.1, `flaresolverr` v3.5.0 → v3.5.2.
+
 ### Fixed
 - **SABnzbd's `other` category now has its folder set**, so Prowlarr search-page grabs land in `<complete_dir>/other/` as documented. 1.12.0 created the category with the folder empty, which SABnzbd treats as "straight into the completed folder" — the first real grab landed beside `tv/` and `movies/`. `configure-apps.sh` corrects an existing empty-folder category on its next run.
 
