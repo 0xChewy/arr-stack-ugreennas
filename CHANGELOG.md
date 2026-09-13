@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.12.1] - 2026-09-13
 
 ### Changed
 - **Image bumps** — `cloudflared` 2026.9.0 → 2026.9.1, `flaresolverr` v3.5.0 → v3.5.2.

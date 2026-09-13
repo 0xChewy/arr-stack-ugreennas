@@ -40,6 +40,19 @@ docker compose -f docker-compose.arr-stack.yml up -d  # Restarts containers with
 
 When upgrading across versions, check below for any action required.
 
+### v1.12.0 → v1.12.1
+
+Two routine image bumps and one folder fix. Pull, recreate the two bumped containers, re-run the script:
+
+```bash
+cd $NAS_STACK_DIR && git pull
+docker compose -f docker-compose.arr-stack.yml up -d flaresolverr
+docker compose -f docker-compose.cloudflared.yml up -d cloudflared   # only if you run the tunnel
+./scripts/configure-apps.sh
+```
+
+The script corrects SABnzbd's `other` category, which 1.12.0 created with an empty folder: Prowlarr search-page grabs now land in `<complete_dir>/other/` as documented. Anything that already completed sits directly in the completed folder — move it by hand.
+
 ### v1.11.0 → v1.12.0
 
 No compose changes. Pull, then re-run the configuration script — it is what changed:
