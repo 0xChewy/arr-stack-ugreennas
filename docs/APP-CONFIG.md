@@ -39,6 +39,7 @@ Streams your media library to any device.
 3. **Add Libraries:**
    - Movies: Content type "Movies", Folder `/data/media/movies`
    - TV Shows: Content type "Shows", Folder `/data/media/tv`
+   - Audiobooks (optional): Content type "Books", Folders `/data/media/audiobooks`, `/data/usenet/complete/other` and `/data/torrents/other` — the last two are where Prowlarr's search-page grabs land (see [4.6 step 8](#46-prowlarr-indexer-manager)), so an audiobook grabbed there appears in Jellyfin with no manual move. A Books library ignores anything that isn't audio or an ebook, so other downloads in that lane don't show up.
 
 > **Optional:** [Enable hardware transcoding](APP-CONFIG-ADVANCED.md#hardware-transcoding-intel-quick-sync) for GPU-accelerated playback (recommended for Ugreen NAS). Also see [Kodi for Fire TV](APP-CONFIG-ADVANCED.md#kodi-for-fire-tv-dolby-vision--truehd-atmos) and [RAID5 streaming tuning](APP-CONFIG-ADVANCED.md#raid5-streaming-tuning).
 
@@ -280,6 +281,7 @@ Manages torrent/Usenet indexers and syncs them to Sonarr/Radarr.
    - SABnzbd: Host `localhost`, Port `8080`, SABnzbd API key, Category `other`
    - `localhost` is right *here* — Prowlarr shares Gluetun's network with both clients. Create the `other` category in qBittorrent (4.1) and SABnzbd (Config → Categories, folder left blank) first.
    - Sonarr and Radarr never use these; they grab through their own clients into `tv`/`movies`. This pair exists so the search page's download button works for anything that is neither — an ISO, an audiobook, music. Without it that button does nothing at all: no grab, no error, nothing in History.
+   - Audiobooks grabbed this way play in Jellyfin if you add its Books library over both `other` folders (see [4.1](#41-jellyfin-media-server)).
 
 ## 4.7 Seerr (Request Manager)
 

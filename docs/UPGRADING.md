@@ -40,6 +40,18 @@ docker compose -f docker-compose.arr-stack.yml up -d  # Restarts containers with
 
 When upgrading across versions, check below for any action required.
 
+### v1.12.1 → v1.12.2
+
+Jellyfin's mount widens from `/data/media` to the whole data root (read-only), so a Books library can index the `other` download lane. Pull and recreate Jellyfin:
+
+```bash
+cd $NAS_STACK_DIR && git pull
+docker compose -f docker-compose.arr-stack.yml up -d jellyfin
+docker logs -f jellyfin 2>&1 | grep -m1 "Startup complete"   # the healthcheck goes green early on 12.0
+```
+
+Then, if you want audiobooks grabbed via Prowlarr to appear in Jellyfin: Dashboard → Libraries → add (or edit) a *Books* library with folders `/data/media/audiobooks`, `/data/usenet/complete/other` and `/data/torrents/other` — [APP-CONFIG.md § 4.1](APP-CONFIG.md#41-jellyfin-media-server).
+
 ### v1.12.0 → v1.12.1
 
 Two routine image bumps and one folder fix. Pull, recreate the two bumped containers, re-run the script:

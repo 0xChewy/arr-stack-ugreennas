@@ -405,7 +405,10 @@ services:
     volumes:
       - jellyfin-config:/config
       - jellyfin-cache:/cache
-      - ${MEDIA_ROOT}/media:/data/media:ro
+      # The whole data root, read-only, so a Books library can index the
+      # `other` download lane (/data/usenet/complete/other, /data/torrents/other)
+      # as well as /data/media. Library paths under /data/media are unchanged.
+      - ${MEDIA_ROOT}:/data:ro
     networks:
       arr-stack:
         ipv4_address: 172.20.0.4
