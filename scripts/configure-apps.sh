@@ -408,28 +408,32 @@ configure_sabnzbd() {
 
     # The `other` category is where anything grabbed from Prowlarr's own search
     # page lands — audiobooks, ISOs, music, whatever is neither TV nor a movie
-    # and so has no Sonarr/Radarr path. With an empty folder field SABnzbd files
-    # it under <complete_dir>/other, next to the tv/ and movies/ folders Sonarr
-    # and Radarr already collect from. Nothing imports from it; it is a landing
-    # spot, not a pipeline.
+    # and so has no Sonarr/Radarr path. Its folder is set explicitly: with the
+    # folder field empty SABnzbd drops the job straight into <complete_dir>
+    # (seen 2026-09-13 — the first grab landed beside tv/ and movies/ rather
+    # than in other/). tv and movies get away with an empty folder because
+    # Sonarr/Radarr import from the path SABnzbd reports, not from a folder
+    # convention; nothing imports from `other`, so a human has to find it.
     local cats
     cats=$(curl -s --connect-timeout 5 -m 15 "${SAB_URL}/api?mode=get_config&section=categories&output=json&apikey=${SABNZBD_API_KEY}" 2>/dev/null) || true
-    local has_other='sys.exit(0 if any(c.get("name") == "other" for c in data.get("config", {}).get("categories", [])) else 1)'
+    local other_ok='sys.exit(0 if any(c.get("name") == "other" and c.get("dir") == "other" for c in data.get("config", {}).get("categories", [])) else 1)'
     if [[ -z "$cats" ]]; then
         fail "SABnzbd: could not read categories"
-    elif json_extract "$cats" "$has_other"; then
-        skip "SABnzbd: category 'other'"
+    elif json_extract "$cats" "$other_ok"; then
+        skip "SABnzbd: category 'other' → <complete_dir>/other"
     elif $DRY_RUN; then
-        ok "SABnzbd: created category 'other' → /data/usenet/complete/other"
+        ok "SABnzbd: set category 'other' → <complete_dir>/other"
     else
-        curl -s --connect-timeout 5 -m 15 -o /dev/null "${SAB_URL}/api?mode=set_config&section=categories&name=other&dir=&pp=&script=Default&priority=-100&output=json&apikey=${SABNZBD_API_KEY}" || true
+        # set_config on an existing name updates it, so this both creates the
+        # category and corrects a folder left empty by the earlier version.
+        curl -s --connect-timeout 5 -m 15 -o /dev/null "${SAB_URL}/api?mode=set_config&section=categories&name=other&dir=other&pp=&script=Default&priority=-100&output=json&apikey=${SABNZBD_API_KEY}" || true
         # Read back rather than trust the write: set_config answers 200 with the
         # config it holds, whether or not it accepted the change.
         cats=$(curl -s --connect-timeout 5 -m 15 "${SAB_URL}/api?mode=get_config&section=categories&output=json&apikey=${SABNZBD_API_KEY}" 2>/dev/null) || true
-        if json_extract "$cats" "$has_other"; then
-            ok "SABnzbd: created category 'other' → /data/usenet/complete/other"
+        if json_extract "$cats" "$other_ok"; then
+            ok "SABnzbd: set category 'other' → <complete_dir>/other"
         else
-            fail "SABnzbd: create category 'other' (not present after write)"
+            fail "SABnzbd: set category 'other' (folder not 'other' after write)"
         fi
     fi
 }

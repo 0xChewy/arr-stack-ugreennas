@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **SABnzbd's `other` category now has its folder set**, so Prowlarr search-page grabs land in `<complete_dir>/other/` as documented. 1.12.0 created the category with the folder empty, which SABnzbd treats as "straight into the completed folder" — the first real grab landed beside `tv/` and `movies/`. `configure-apps.sh` corrects an existing empty-folder category on its next run.
+
 ## [1.12.0] - 2026-09-11
 
 A review of the previous release's Bazarr work found it wrong in three ways and the script's success reporting wrong in one; both are rebuilt and proven against throwaway instances, and a fresh install now gets working cross-namespace connections and a download lane for everything that isn't TV or a movie.
