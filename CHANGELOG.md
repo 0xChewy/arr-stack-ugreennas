@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **`uptime-kuma` pinned to `2.5.4`** instead of the major-only `2`. The floating tag meant the version changed whenever the container was recreated — the UGOS Monday maintenance run had already moved it to 2.5.4 without anyone choosing to — and the pinning test could not see it. Renovate now proposes the bumps like every other image.
+
 ## [1.13.0] - 2026-09-14
 
 The repo gets CI, three guards for the rules the compose files could silently lose, and a shared project name that is written down instead of inherited from a directory. Everything in it went through the new gate — and through three reviews that found the first cut's own blind spots.
