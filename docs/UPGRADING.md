@@ -40,6 +40,15 @@ docker compose -f docker-compose.arr-stack.yml up -d  # Restarts containers with
 
 When upgrading across versions, check below for any action required.
 
+### v1.13.0 → v1.13.1
+
+One image pin. Pull and recreate uptime-kuma (its data volume is small; back it up first if you like):
+
+```bash
+cd $NAS_STACK_DIR && git pull
+docker compose -f docker-compose.utilities.yml up -d uptime-kuma
+```
+
 ### v1.12.2 → v1.13.0
 
 The three core compose files now pin `name: arr-stack`. If your deploy directory is already called `arr-stack` (the documented layout, `$NAS_STACK_DIR=/volume1/docker/arr-stack`) nothing changes — `git pull` and carry on. Volumes are unaffected either way; they have had explicit names since 1.7.
