@@ -7,5 +7,6 @@ failure-threshold: warning
 ignored:
   - DL3008  # apt-get install without pinned versions — deliberate for a devcontainer
   - DL3016  # npm install without pinned versions — same
+  - DL3013  # pip install without pinned versions — same
   - DL3002  # last USER is root — devcontainer features and postCreate run as root; VS Code connects as vscode
   - DL3066  # non-numeric USER vscode — the user is defined by the base image

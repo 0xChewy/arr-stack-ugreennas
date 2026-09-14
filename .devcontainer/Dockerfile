@@ -1,5 +1,9 @@
 FROM mcr.microsoft.com/devcontainers/base:ubuntu
 
+# Two RUN lines below pipe curl into a shell; without pipefail a failed
+# download would be masked by the pipe's last command succeeding.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # Node.js (for Claude Code + Playwright)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
