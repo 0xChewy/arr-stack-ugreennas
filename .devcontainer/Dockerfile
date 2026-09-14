@@ -6,7 +6,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Node.js (for Claude Code + Playwright)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y nodejs \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Docker CLI + Compose plugin (to manage the project's docker-compose stack)
@@ -50,3 +50,8 @@ USER root
 
 # Playwright system deps (for running e2e tests)
 RUN npx playwright install-deps chromium 2>/dev/null || true
+
+# End as the user VS Code connects as. Root was only needed for the package
+# installs above; a container that starts as root is what trivy DS-0002 and
+# hadolint DL3002 flag, and neither tool is wrong about it.
+USER vscode
