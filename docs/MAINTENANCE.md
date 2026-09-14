@@ -175,6 +175,21 @@ Weekly is plenty. Pair it with an Uptime Kuma push monitor the same way as the V
 
 Anything it finds: verify, delete, then blocklist the release in Sonarr/Radarr (Activity → Queue → remove with **Blocklist** ticked) so the same grab isn't repeated. The e2e suite asserts the same steady state in `tests/e2e/media-hygiene.spec.ts`.
 
+## Audiobooks on the TV
+
+Jellyfin classifies a `.m4b` as an AudioBook, and the Android TV app cannot play AudioBook items — only the web client can. `scripts/audiobooks-tv-mirror.sh` hardlinks every `.m4b` in the audiobook folders (including the two `other` download lanes) as a `.m4a` under `/data/media/audiobooks-tv/`, where a *Music*-type Jellyfin library sees a plain audio track the TV plays. Same bytes, no extra space, originals untouched. It prunes a link whose source is gone.
+
+```bash
+./scripts/audiobooks-tv-mirror.sh --dry-run   # what it would link or prune
+./scripts/audiobooks-tv-mirror.sh
+```
+
+```bash
+*/15 * * * * $NAS_STACK_DIR/scripts/audiobooks-tv-mirror.sh >> $NAS_STACK_DIR/logs/audiobooks-tv-mirror.log 2>&1
+```
+
+The Jellyfin side is one library: Dashboard → Libraries → add a *Music* library named e.g. "Audiobooks (TV)" over `/data/media/audiobooks-tv` — see [APP-CONFIG.md § 4.1](APP-CONFIG.md#41-jellyfin-media-server). Chapter navigation exists only in the web's Books library; the TV gets resume.
+
 ## Health Checks
 
 All services have Docker healthchecks. Check status:

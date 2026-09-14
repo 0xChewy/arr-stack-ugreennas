@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Audiobooks play on the TV.** Jellyfin classifies a `.m4b` as an AudioBook item in any library type, and the Android TV app cannot play AudioBook items — only the web client implements the Books library. `scripts/audiobooks-tv-mirror.sh` hardlinks every `.m4b` in the audiobook folders and the two `other` lanes as a `.m4a` under `/data/media/audiobooks-tv/`, where a Music-type library gives the TV a plain audio track: same bytes, no space, originals and the web's chapter UI untouched; links whose source is gone are pruned. Unit-tested on a throwaway tree by inode; a cron line and the library setup are in MAINTENANCE.md and APP-CONFIG.md.
+
 ## [1.13.1] - 2026-09-14
 
 ### Changed
