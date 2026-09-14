@@ -40,6 +40,10 @@ docker compose -f docker-compose.arr-stack.yml up -d  # Restarts containers with
 
 When upgrading across versions, check below for any action required.
 
+### v1.13.1 → v1.13.2
+
+Nothing to recreate: this release adds a script, tests and docs. `git pull` and carry on. If you want audiobooks on the Jellyfin TV app, add the Music library and the cron entry described in [MAINTENANCE.md](MAINTENANCE.md#audiobooks-on-the-tv) — both are opt-in; the web's Books library is unchanged.
+
 ### v1.13.0 → v1.13.1
 
 One image pin. Pull and recreate uptime-kuma (its data volume is small; back it up first if you like):

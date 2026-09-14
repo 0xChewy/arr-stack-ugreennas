@@ -39,7 +39,8 @@ Streams your media library to any device.
 3. **Add Libraries:**
    - Movies: Content type "Movies", Folder `/data/media/movies`
    - TV Shows: Content type "Shows", Folder `/data/media/tv`
-   - Audiobooks (optional): Content type "Books", Folders `/data/media/audiobooks`, `/data/usenet/complete/other` and `/data/torrents/other` — the last two are where Prowlarr's search-page grabs land (see [4.6 step 8](#46-prowlarr-indexer-manager)), so an audiobook grabbed there appears in Jellyfin with no manual move. A Books library ignores anything that isn't audio or an ebook, so other downloads in that lane don't show up.
+   - Audiobooks (optional): Content type "Books", Folders `/data/media/audiobooks`, `/data/usenet/complete/other` and `/data/torrents/other` — the last two are where Prowlarr's search-page grabs land (see [4.6 step 8](#46-prowlarr-indexer-manager)), so an audiobook grabbed there appears in Jellyfin with no manual move. A Books library ignores anything that isn't audio or an ebook, so other downloads in that lane don't show up. **The Android TV app cannot play this library** — only the web client implements Books.
+   - Audiobooks (TV) (optional): Content type "Music", Folder `/data/media/audiobooks-tv`. That folder holds `.m4a` hardlinks of the same files, made by `scripts/audiobooks-tv-mirror.sh` on a timer ([MAINTENANCE.md](MAINTENANCE.md#audiobooks-on-the-tv)); the TV app plays them as audio tracks with resume, no chapters.
 
 > **Optional:** [Enable hardware transcoding](APP-CONFIG-ADVANCED.md#hardware-transcoding-intel-quick-sync) for GPU-accelerated playback (recommended for Ugreen NAS). Also see [Kodi for Fire TV](APP-CONFIG-ADVANCED.md#kodi-for-fire-tv-dolby-vision--truehd-atmos) and [RAID5 streaming tuning](APP-CONFIG-ADVANCED.md#raid5-streaming-tuning).
 
