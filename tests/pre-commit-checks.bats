@@ -147,3 +147,26 @@ EOF
 
     rm -rf "$tmpdir"
 }
+
+# --- doc links -------------------------------------------------------------
+#
+# check_doc_links was hook-only: nothing in the suite ran it, so a contributor
+# without the hooks could merge a broken link and CI would never know. It
+# resolves the repo from the working directory, so the negative drives it in a
+# throwaway git repo with one broken link.
+
+@test "check_doc_links: every internal link in the repo's markdown resolves" {
+    run bash -c "cd '$REPO_ROOT' && source scripts/lib/common.sh && source scripts/lib/check-doc-links.sh && check_doc_links"
+    assert_success
+    assert_output --partial "OK: All internal doc links valid"
+}
+
+@test "check_doc_links: reports a link to a file that does not exist" {
+    local t; t=$(mktemp -d)
+    printf '# Doc\n\nSee [the guide](docs/MISSING.md).\n' > "$t/README.md"
+    git -C "$t" init -q && git -C "$t" add -A
+    run bash -c "cd '$t' && source '$REPO_ROOT/scripts/lib/common.sh' && source '$REPO_ROOT/scripts/lib/check-doc-links.sh' && check_doc_links"
+    rm -rf "$t"
+    assert_failure
+    assert_output --partial "broken link to 'docs/MISSING.md'"
+}

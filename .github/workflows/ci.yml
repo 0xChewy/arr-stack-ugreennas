@@ -7,7 +7,7 @@
 # merge, and so the checks that need a network — registry tags, vulnerability
 # databases — run somewhere that has one.
 #
-# Blocking on every push and PR: bats, lint, supply-chain. Nightly and on
+# Blocking on every pull request and on main: bats, lint, supply-chain. Nightly and on
 # demand: the container-image CVE scan, which is diagnostic — it uploads a
 # report and never fails the run, because a CVE in an upstream image is
 # information for the next bump, not a reason to block a docs change.
@@ -23,7 +23,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: ['**']
+    branches: [main]
   workflow_dispatch: {}
   schedule:
     - cron: '17 4 * * *'   # nightly, UTC
@@ -63,7 +63,7 @@ jobs:
           {
             echo '## bats'
             echo '```'
-            grep -E '^(ok|not ok|1\.\.)' "$RUNNER_TEMP/bats.log" | tail -n 150
+            grep -E '^(ok|not ok|1\.\.)' "$RUNNER_TEMP/bats.log" | tail -n 150 || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -113,7 +113,10 @@ jobs:
           done
       - name: SBOM (syft — SPDX and CycloneDX)
         run: |
-          docker run --rm -v "$PWD:/repo" -w /repo \
+          # Playwright is a devDependency and the only JS here; syft and trivy both
+          # skip dev dependencies by default, which made the first SBOM two entries
+          # long and the first vulnerability scan cover zero packages.
+          docker run --rm -v "$PWD:/repo" -w /repo -e SYFT_JAVASCRIPT_INCLUDE_DEV_DEPENDENCIES=true \
             anchore/syft:v1.51.1@sha256:95fe0835e5bebc6f8b1f8acef68d47d63d594ef4c0f25c097ff853b23cbac74c \
             dir:. --exclude './node_modules/**' --exclude './tests/bats-*/**' \
             -o spdx-json=/repo/sbom.spdx.json -o cyclonedx-json=/repo/sbom.cyclonedx.json
@@ -130,14 +133,14 @@ jobs:
           mkdir -p "$HOME/.cache/trivy"
           docker run --rm -v "$PWD:/repo" -w /repo -v "$HOME/.cache/trivy:/root/.cache/trivy" \
             aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 \
-            fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --exit-code 1 --no-progress \
+            fs --scanners vuln,misconfig,secret --include-dev-deps --severity HIGH,CRITICAL --exit-code 1 --no-progress \
             --skip-dirs node_modules,tests/bats-core,tests/bats-support,tests/bats-assert .
 
   nightly:
     name: nightly — container image CVEs (diagnostic)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Pull the tool images (retried — a registry hiccup must not fail a required check)
@@ -155,34 +158,44 @@ jobs:
         # not a reason to block a docs change. The report is the artifact.
         run: |
           mkdir -p "$HOME/.cache/trivy" trivy-images
-          mapfile -t images < <(grep -hE '^[[:space:]]+image:' docker-compose.*.yml | sed -E 's/^[[:space:]]+image:[[:space:]]*//; s/"//g' | grep -v '\$' | sort -u)
-          echo "${#images[@]} images"
-          for img in "${images[@]}"; do
+          # The image list comes from compose itself, so variables and quoting
+          # are resolved rather than grepped around.
+          for f in docker-compose*.yml; do
+            docker compose -f "$f" --env-file tests/fixtures/.env.test config --format json \
+              | python3 -c 'import json,sys; [print(s["image"]) for s in json.load(sys.stdin).get("services",{}).values() if s.get("image")]'
+          done | sort -u > trivy-images/images.txt
+          echo "$(wc -l < trivy-images/images.txt) images"
+          while IFS= read -r img; do
             safe=$(printf '%s' "$img" | tr '/:@' '___')
             docker run --rm -v "$HOME/.cache/trivy:/root/.cache/trivy" -v "$PWD/trivy-images:/out" \
               aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 \
               image --severity HIGH,CRITICAL --format json --output "/out/$safe.json" --no-progress "$img" \
               || echo "::warning::trivy could not scan $img"
-          done
+          done < trivy-images/images.txt
       - name: Summary — HIGH and CRITICAL counts per image
         if: always()
         run: |
           python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
-          import glob, json
+          import json, os
+          # Driven by the image list, not by whichever reports exist: an image
+          # that could not be scanned is a row that says so, never a silence.
           print("## container image CVEs (HIGH / CRITICAL)\n")
           print("| image | HIGH | CRITICAL |")
           print("| --- | ---: | ---: |")
-          for f in sorted(glob.glob("trivy-images/*.json")):
+          for img in open("trivy-images/images.txt").read().split():
+              f = "trivy-images/" + img.translate(str.maketrans("/:@", "___")) + ".json"
+              if not os.path.exists(f):
+                  print(f"| {img} | scan failed | scan failed |"); continue
               try:
                   d = json.load(open(f))
               except Exception:
-                  print(f"| {f} | ? | ? |"); continue
+                  print(f"| {img} | unreadable report | unreadable report |"); continue
               hi = cr = 0
-              for r in d.get("Results", []) or []:
-                  for v in r.get("Vulnerabilities", []) or []:
+              for r in d.get("Results") or []:
+                  for v in r.get("Vulnerabilities") or []:
                       if v.get("Severity") == "HIGH": hi += 1
                       elif v.get("Severity") == "CRITICAL": cr += 1
-              print(f"| {d.get('ArtifactName', f)} | {hi} | {cr} |")
+              print(f"| {img} | {hi} | {cr} |")
           PY
       - name: Upload the reports
         if: always()
@@ -191,3 +204,16 @@ jobs:
           name: trivy-images
           path: trivy-images/
           retention-days: 14
+
+  devcontainer:
+    name: nightly — the devcontainer builds
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: docker build
+        # hadolint and trivy read this file; nothing else builds it. A
+        # nodesource URL change or a dropped apt package would otherwise be
+        # found by the next person to rebuild their container.
+        run: docker build --no-cache -f .devcontainer/Dockerfile .devcontainer

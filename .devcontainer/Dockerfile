@@ -49,7 +49,7 @@ ENV PATH="/home/vscode/.npm-global/bin:${PATH}"
 USER root
 
 # Playwright system deps (for running e2e tests)
-RUN npx playwright install-deps chromium 2>/dev/null || true
+RUN npx playwright install-deps chromium
 
 # End as the user VS Code connects as. Root was only needed for the package
 # installs above; a container that starts as root is what trivy DS-0002 and

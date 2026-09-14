@@ -46,7 +46,7 @@ shell_files() {
         run shellcheck -S error -x "${rel[@]}"
     elif command -v docker &>/dev/null && docker info &>/dev/null; then
         run docker run --rm -v "$REPO_ROOT:/mnt" -w /mnt \
-            koalaman/shellcheck:stable -S error -x "${rel[@]}"
+            koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d -S error -x "${rel[@]}"
     else
         skip "neither shellcheck nor a running docker daemon is available"
     fi

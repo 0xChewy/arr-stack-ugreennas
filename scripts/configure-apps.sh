@@ -96,6 +96,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --verbose|-v)
+            # shellcheck disable=SC2034  # read by verbose() in lib/configure-helpers.sh
             VERBOSE=true
             shift
             ;;

@@ -129,22 +129,22 @@ The actual `.yml` files are gitignored, so:
 
 ## Continuous Integration
 
-`.github/workflows/ci.yml` runs on every push and pull request. It does not replace the rule that every change is tested on the NAS before it reaches `main` — nothing in CI can reach the stack — it front-loads the checks that don't need it, and it is the only gate a contributor without the local hooks passes through.
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`. It does not replace the rule that every change is tested on the NAS before it reaches `main` — nothing in CI can reach the stack — it front-loads the checks that don't need it, and it is the only gate a contributor without the local hooks passes through.
 
 | job | what it runs | blocks merge? |
 |---|---|---|
-| `bats suite` | `tests/run-tests.sh` — the same suite as the pre-commit hook: compose validity, ports and IPs, secrets hygiene, env documentation, doc links, shellcheck at `error`, the unit tests for `configure-apps.sh`, and the architecture rules (download clients inside gluetun's namespace, project names, the `arr-stack` subnet pins). Registry-tag checks run here with a real network. | yes |
+| `bats suite` | `tests/run-tests.sh`: compose validity, ports and IPs, secrets hygiene, env documentation, doc links, container posture, shellcheck at `error`, the unit tests for `configure-apps.sh`, and the architecture rules (download clients inside gluetun's namespace, project names, the `arr-stack` subnet pins). The pre-commit hook runs its own eleven checks; the two overlap in intent, and the bats suite drives several of the hook's check functions directly. Registry-tag checks are guaranteed a network here. | yes |
 | `lint` | actionlint over the workflow, hadolint over the devcontainer Dockerfile, shellcheck at `warning` (advisory — printed, never fails) | yes, except the advisory step |
 | `supply chain` | syft SBOM (SPDX + CycloneDX, uploaded as an artifact); trivy over the tree for vulnerabilities, misconfiguration and secrets at HIGH/CRITICAL | yes |
-| `nightly` | trivy image scan over every image the compose files pin — a report per image and a count table in the run summary | never — diagnostic |
+| `nightly` | trivy image scan over every image the compose files pin — a report per image and a count table in the run summary (an image that could not be scanned is a row that says so); and a `docker build` of the devcontainer Dockerfile, which nothing else builds | never — diagnostic |
 
-Run the blocking checks locally before pushing: `./tests/run-tests.sh` is the whole `bats` job. The lint and supply-chain tools run from the same digest-pinned images CI uses, so `docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:<tag>@<digest>` reproduces the job exactly. [`docs/QUALITY-CONTROL-MAP.md`](docs/QUALITY-CONTROL-MAP.md) says which surface covers which capability, and where nothing does.
+Run the blocking checks locally before pushing: `./tests/run-tests.sh` is the whole `bats` job. The lint and supply-chain steps each run one digest-pinned image with the flags shown in the workflow — copy the step's `docker run` line to reproduce it. [`docs/QUALITY-CONTROL-MAP.md`](docs/QUALITY-CONTROL-MAP.md) says which surface covers which capability, and where nothing does.
 
 ### Pinning policy
 
 Everything that can float is pinned, and the pin lives next to a human-readable version so a bump is one visible line:
 
-- **Compose images** — exact tags (`lscr.io/linuxserver/sonarr:4.0.15`), never `latest`; `tests/compose-validation.bats` fails on a floating tag and checks each tag exists on its registry. Renovate opens the bumps; every bump is tested on the NAS before merge.
+- **Compose images** — exact tags (`lscr.io/linuxserver/sonarr:4.0.15`), never `latest`; `tests/compose-validation.bats` fails on `latest` or an untagged image and checks each tag exists on its registry. A major-only tag such as `louislam/uptime-kuma:2` passes the test but still floats — prefer the full version. Renovate opens the bumps; every bump is tested on the NAS before merge.
 - **GitHub Actions** — commit SHAs with the version in a trailing comment (`actions/checkout@3d3c42e… # v7.0.1`). Renovate keeps them current (`helpers:pinGitHubActionDigests`).
 - **CI tool images** — tag plus digest (`aquasec/trivy:0.74.0@sha256:…`). Bumped by hand, digest and comment together: `docker buildx imagetools inspect <image> --format '{{.Manifest.Digest}}'`.
 - **The devcontainer** — deliberately tracks unpinned apt and npm packages; it is a development box, not a deployment. hadolint's version-pinning rules are ignored for it in `.hadolint.yaml`, with the reason.
@@ -194,7 +194,7 @@ rm .git/hooks/pre-commit
 
 ### SSH-based Checks (NAS .env backup, Uptime monitors)
 
-The last two checks require SSH access to your NAS. They gracefully skip when:
+Three checks require SSH — the `.env` backup sync, the Uptime Kuma monitors and duplicate `.lan` domains — and the domain-accessibility check needs the NAS config but not SSH; all access to your NAS. They gracefully skip when:
 - NAS is not reachable (ping fails)
 - SSH port is blocked/closed
 - SSH authentication fails

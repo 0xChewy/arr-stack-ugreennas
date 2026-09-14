@@ -59,10 +59,10 @@ check_uptime_monitors() {
 
     # Check for missing monitors
     for service in "${expected[@]}"; do
-        local service_lower=$(echo "$service" | tr '[:upper:]' '[:lower:]')
-        local found=0
+        local service_lower found=0 monitor_lower
+        service_lower=$(echo "$service" | tr '[:upper:]' '[:lower:]')
         while IFS= read -r monitor; do
-            local monitor_lower=$(echo "$monitor" | tr '[:upper:]' '[:lower:]')
+            monitor_lower=$(echo "$monitor" | tr '[:upper:]' '[:lower:]')
             if [[ "$monitor_lower" == "$service_lower" ]]; then
                 found=1
                 break
@@ -78,10 +78,10 @@ check_uptime_monitors() {
     local known_extras=("Home Assistant" "Reolink NVR" "Cloudflared Metrics" "Jellyfin (External)")
     while IFS= read -r monitor; do
         [[ -z "$monitor" ]] && continue
-        local found=0
-        local monitor_lower=$(echo "$monitor" | tr '[:upper:]' '[:lower:]')
+        local found=0 monitor_lower service_lower
+        monitor_lower=$(echo "$monitor" | tr '[:upper:]' '[:lower:]')
         for service in "${expected[@]}" "${known_extras[@]}"; do
-            local service_lower=$(echo "$service" | tr '[:upper:]' '[:lower:]')
+            service_lower=$(echo "$service" | tr '[:upper:]' '[:lower:]')
             if [[ "$monitor_lower" == "$service_lower" ]]; then
                 found=1
                 break
