@@ -1,8 +1,12 @@
 FROM mcr.microsoft.com/devcontainers/base:ubuntu
 
+# Two RUN lines below pipe curl into a shell; without pipefail a failed
+# download would be masked by the pipe's last command succeeding.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # Node.js (for Claude Code + Playwright)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-    && apt-get install -y nodejs \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Docker CLI + Compose plugin (to manage the project's docker-compose stack)
@@ -22,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Python3 + PyYAML (for pre-commit YAML validation and fix-radarr-paths.sh)
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3 python3-pip \
-    && pip3 install --break-system-packages pyyaml \
+    && pip3 install --no-cache-dir --break-system-packages pyyaml \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI
@@ -45,4 +49,9 @@ ENV PATH="/home/vscode/.npm-global/bin:${PATH}"
 USER root
 
 # Playwright system deps (for running e2e tests)
-RUN npx playwright install-deps chromium 2>/dev/null || true
+RUN npx playwright install-deps chromium
+
+# End as the user VS Code connects as. Root was only needed for the package
+# installs above; a container that starts as root is what trivy DS-0002 and
+# hadolint DL3002 flag, and neither tool is wrong about it.
+USER vscode

@@ -1,0 +1,14 @@
+# Fixture for tests/compose-validation.bats (see the test that names this file).
+name: fixture
+services:
+  gluetun:
+    image: qmcgaw/gluetun:v3.41
+    container_name: gluetun
+  sabnzbd:
+    image: lscr.io/linuxserver/sabnzbd:5.1.3
+    container_name: sabnzbd
+    network_mode: "service:gluetun"
+  # The binding is missing: this is what the check exists to catch.
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:5.1.2
+    container_name: qbittorrent

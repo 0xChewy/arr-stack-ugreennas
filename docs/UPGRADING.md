@@ -40,6 +40,26 @@ docker compose -f docker-compose.arr-stack.yml up -d  # Restarts containers with
 
 When upgrading across versions, check below for any action required.
 
+### v1.12.2 → v1.13.0
+
+The three core compose files now pin `name: arr-stack`. If your deploy directory is already called `arr-stack` (the documented layout, `$NAS_STACK_DIR=/volume1/docker/arr-stack`) nothing changes — `git pull` and carry on. Volumes are unaffected either way; they have had explicit names since 1.7.
+
+If your directory is called something else, the project name changes on your next `up`, and Compose will refuse to start containers whose names already belong to the old project. Two ways through:
+
+- **Keep your old name (no migration):** add `COMPOSE_PROJECT_NAME=<your-directory-name>` to `.env`. The environment overrides the `name:` key.
+- **Adopt `arr-stack`:** the containers have to be recreated under the new project, and that means `down` — the one exception to the core file's own banner. Pi-hole goes down with it, so anything on your network that uses it for DNS loses resolution until `up` completes: pull first while DNS still works, then take the files down in reverse order (the shared `arr-stack` network belongs to the core file and cannot be removed while traefik or the utilities are still attached), then bring them up. Named volumes survive `down`.
+
+  ```bash
+  OLD=$(basename "$PWD")
+  for f in docker-compose.arr-stack.yml docker-compose.traefik.yml docker-compose.utilities.yml; do docker compose -f "$f" pull; done
+  for f in docker-compose.utilities.yml docker-compose.traefik.yml docker-compose.arr-stack.yml; do docker compose -p "$OLD" -f "$f" down; done
+  for f in docker-compose.arr-stack.yml docker-compose.traefik.yml docker-compose.utilities.yml; do docker compose -f "$f" up -d; done
+  ```
+
+  If a container from another compose project sits on the `arr-stack` network (CLAUDE.md's neighbouring project does), the network cannot be removed and `up` adopts it with a warning about the old project label. That is harmless; the label clears when that container is next recreated.
+
+CI is new (`.github/workflows/ci.yml`); nothing to do for it on the NAS.
+
 ### v1.12.1 → v1.12.2
 
 Jellyfin's mount widens from `/data/media` to the whole data root (read-only), so a Books library can index the `other` download lane. Pull and recreate Jellyfin:

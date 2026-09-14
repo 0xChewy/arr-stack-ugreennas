@@ -14,6 +14,9 @@
 # so renaming that directory silently swaps in empty volumes rather than
 # failing. These carry the Uptime Kuma history, Beszel metrics and diun's
 # seen-tags DB, all of which are annoying to lose and easy to lose silently.
+# One project with docker-compose.arr-stack.yml — see the note there.
+name: arr-stack
+
 volumes:
   duc-index:
     name: arr-stack_duc-index

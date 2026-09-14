@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **CI.** `.github/workflows/ci.yml` runs on every pull request and on `main`: the bats suite (which now also drives the hook's doc-link check, and is guaranteed a network for the registry-tag checks), lint (actionlint, hadolint, shellcheck at warning as an advisory), and a supply-chain job (syft SBOM as an artifact; trivy over the tree for vulnerabilities, misconfiguration and secrets, blocking at HIGH/CRITICAL). A nightly job scans every image the compose files pin and publishes a per-image count table — diagnostic, never blocking. Every action is pinned to a commit SHA and every tool image to a digest; Renovate keeps the SHAs current. This does not change the NAS rule; it is the gate a contributor without the local hooks passes through. `CONTRIBUTING.md` documents the jobs and the pinning policy.
+- **Three architecture tests** in `tests/compose-validation.bats`, each with a negative case that proves it can fail: every BitTorrent or Usenet client runs inside gluetun's namespace (by name and by image pattern — the positive rule nothing asserted before); every compose file pins its project name and the core three share `arr-stack`; the `arr-stack` subnet, `ip_range` and gateway stay pinned — the lines CLAUDE.md calls a live hazard.
+- **`docs/QUALITY-CONTROL-MAP.md`** — which surface (hook, local, CI, nightly, NAS) checks which capability, and the five gaps it makes visible. Adapted, with the tests above, from leonardoazeredo/ultimate-arr-stack's quality plan.
+
+### Changed
+- **The three core compose files pin `name: arr-stack`.** They have always been one project — it is why `--remove-orphans` on any of them deletes the others' containers — but the name came from the deploy directory. No-op on a directory called `arr-stack`; `docs/UPGRADING.md` covers the two paths for any other name, including `COMPOSE_PROJECT_NAME` in `.env` as the zero-migration one.
+
 ## [1.12.2] - 2026-09-13
 
 ### Changed

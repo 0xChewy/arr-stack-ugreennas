@@ -190,7 +190,7 @@ _find_latest() {
 }
 
 check_image_versions() {
-    local repo_root warnings=0
+    local repo_root
     repo_root=$(get_repo_root)
 
     # Quick network check - skip if offline
