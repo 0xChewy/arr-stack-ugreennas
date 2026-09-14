@@ -184,9 +184,15 @@ Jellyfin classifies a `.m4b` as an AudioBook, and the Android TV app cannot play
 ./scripts/audiobooks-tv-mirror.sh
 ```
 
+On UGOS the admin user cannot write its own crontab (`crontab -` fails with `mkstemp: Permission denied`, and writing the spool file by hand is silently ignored — see [UTILITIES.md](UTILITIES.md#the-vpn-check-and-why-it-is-a-push-monitor)). Install it via root:
+
 ```bash
-*/15 * * * * $NAS_STACK_DIR/scripts/audiobooks-tv-mirror.sh >> $NAS_STACK_DIR/logs/audiobooks-tv-mirror.log 2>&1
+crontab -l > /tmp/cron.new
+echo '*/15 * * * * $NAS_STACK_DIR/scripts/audiobooks-tv-mirror.sh >> $NAS_STACK_DIR/logs/audiobooks-tv-mirror.log 2>&1' >> /tmp/cron.new
+sudo crontab -u <user> /tmp/cron.new
 ```
+
+Trust it only once `logs/audiobooks-tv-mirror.log` shows a run.
 
 The Jellyfin side is one library: Dashboard → Libraries → add a *Music* library named e.g. "Audiobooks (TV)" over `/data/media/audiobooks-tv` — see [APP-CONFIG.md § 4.1](APP-CONFIG.md#41-jellyfin-media-server). Chapter navigation exists only in the web's Books library; the TV gets resume.
 
