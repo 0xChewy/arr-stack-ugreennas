@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.13.0] - 2026-09-14
+
+The repo gets CI, three guards for the rules the compose files could silently lose, and a shared project name that is written down instead of inherited from a directory. Everything in it went through the new gate — and through three reviews that found the first cut's own blind spots.
 
 ### Added
 - **CI.** `.github/workflows/ci.yml` runs on every pull request and on `main`: the bats suite (which now also drives the hook's doc-link check, and is guaranteed a network for the registry-tag checks), lint (actionlint, hadolint, shellcheck at warning as an advisory), and a supply-chain job (syft SBOM as an artifact; trivy over the tree for vulnerabilities, misconfiguration and secrets, blocking at HIGH/CRITICAL). A nightly job scans every image the compose files pin and publishes a per-image count table — diagnostic, never blocking. Every action is pinned to a commit SHA and every tool image to a digest; Renovate keeps the SHAs current. This does not change the NAS rule; it is the gate a contributor without the local hooks passes through. `CONTRIBUTING.md` documents the jobs and the pinning policy.
