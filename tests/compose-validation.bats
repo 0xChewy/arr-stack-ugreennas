@@ -176,3 +176,86 @@ get_service_block() {
         done < <(grep -E '^[[:space:]]+image:[[:space:]]' "$f" 2>/dev/null)
     done
 }
+
+# --- architecture: rules the compose files must keep, and can silently lose ---
+#
+# Adapted from leonardoazeredo/ultimate-arr-stack (tests/compose-validation.bats,
+# the "quality plan" branch). Each rule has a negative test that feeds the same
+# check a fixture or a mutated copy, because a guard that has never been seen
+# to fail is not yet a guard.
+
+@test "every BitTorrent or Usenet client runs inside gluetun's namespace" {
+    run python3 "$TEST_DIR/helpers/check-clients-tunnelled.py" "$REPO_ROOT"
+    assert_success
+    assert_output --partial "all inside gluetun's namespace"
+}
+
+@test "the tunnelled-clients check rejects a client with no VPN binding" {
+    cp "$TEST_DIR/fixtures/compose-client-outside-vpn.yml" "$BATS_TEST_TMPDIR/docker-compose.fixture.yml"
+    run python3 "$TEST_DIR/helpers/check-clients-tunnelled.py" "$BATS_TEST_TMPDIR"
+    assert_failure
+    assert_output --partial "VIOLATION"
+    assert_output --partial "qbittorrent"
+}
+
+# Which compose files form one project is not cosmetic: it is why
+# `--remove-orphans` on one file deletes the others' containers (CLAUDE.md),
+# and why the `arr-stack_` prefix on networks is stable. Written out rather
+# than derived, so a rename fails here — that is the point of pinning it.
+assert_project_names() {
+    local dir="$1" f name base expected
+    for f in "$dir"/docker-compose*.yml; do
+        base=$(basename "$f")
+        name=$(grep -m1 '^name:' "$f" | sed 's/^name:[[:space:]]*//')
+        [ -n "$name" ] || { echo "$base does not pin a project name"; return 1; }
+        case "$base" in
+            docker-compose.arr-stack.yml|docker-compose.traefik.yml|docker-compose.utilities.yml) expected=arr-stack ;;
+            docker-compose.cloudflared.yml) expected=cloudflared ;;
+            docker-compose.tailscale.yml)   expected=tailscale ;;
+            docker-compose.fixture.yml)     expected=arr-stack ;;   # what the negative test mutates
+            *) echo "$base is not in the expected-project-name table; add it"; return 1 ;;
+        esac
+        [ "$name" = "$expected" ] || { echo "$base pins project '$name', expected '$expected'"; return 1; }
+    done
+    echo "project names pinned as expected"
+}
+
+@test "every compose file pins its project name, and the core three share arr-stack" {
+    run assert_project_names "$REPO_ROOT"
+    assert_success
+}
+
+@test "the project-name check fails when a file loses its name line" {
+    grep -v '^name:' "$REPO_ROOT/docker-compose.arr-stack.yml" > "$BATS_TEST_TMPDIR/docker-compose.fixture.yml"
+    run assert_project_names "$BATS_TEST_TMPDIR"
+    assert_failure
+    assert_output --partial "does not pin a project name"
+}
+
+# Two addresses in this stack are only safe because of these lines: gluetun's
+# reserved 172.20.0.3 and every other static IP sit outside the dynamic half,
+# and ip_range is what confines Docker's allocator to 172.20.0.128/25 — the
+# reason a neighbouring container does not land on gluetun's address after a
+# reboot (CLAUDE.md, "Cross-Stack"). Widen the range and the allocator is back
+# on top of the pins.
+assert_arr_network_pinned() {
+    local f="$1" block
+    block=$(awk '/^  arr-stack:$/{p=1} p&&/^  [a-z]/&&!/^  arr-stack:$/{p=0} p' "$f")
+    [ -n "$block" ] || { echo "no arr-stack network block in $(basename "$f")"; return 1; }
+    grep -qE '^[[:space:]]*-[[:space:]]*subnet:[[:space:]]*172\.20\.0\.0/24$' <<<"$block" || { echo "arr-stack subnet must stay 172.20.0.0/24"; return 1; }
+    grep -qE '^[[:space:]]+ip_range:[[:space:]]*172\.20\.0\.128/25$' <<<"$block"     || { echo "arr-stack ip_range must stay 172.20.0.128/25 — or Docker's allocator overlaps the pinned static IPs"; return 1; }
+    grep -qE '^[[:space:]]+gateway:[[:space:]]*172\.20\.0\.1$' <<<"$block"             || { echo "arr-stack gateway must stay 172.20.0.1"; return 1; }
+    echo "arr-stack network pins intact"
+}
+
+@test "the arr-stack subnet, dynamic range and gateway stay pinned" {
+    run assert_arr_network_pinned "$REPO_ROOT/docker-compose.arr-stack.yml"
+    assert_success
+}
+
+@test "the network-pin check fails when the dynamic range is widened" {
+    sed 's|ip_range: 172.20.0.128/25|ip_range: 172.20.0.0/24|' "$REPO_ROOT/docker-compose.arr-stack.yml" > "$BATS_TEST_TMPDIR/docker-compose.mutated.yml"
+    run assert_arr_network_pinned "$BATS_TEST_TMPDIR/docker-compose.mutated.yml"
+    assert_failure
+    assert_output --partial "ip_range must stay"
+}

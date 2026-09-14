@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Python3 + PyYAML (for pre-commit YAML validation and fix-radarr-paths.sh)
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3 python3-pip \
-    && pip3 install --break-system-packages pyyaml \
+    && pip3 install --no-cache-dir --break-system-packages pyyaml \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI

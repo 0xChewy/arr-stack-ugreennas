@@ -13,6 +13,9 @@
 # Access: traefik.lan | traefik.yourdomain.com | NAS_IP:9090
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# One project with docker-compose.arr-stack.yml — see the note there.
+name: arr-stack
+
 services:
   traefik:
     image: traefik:v3.7

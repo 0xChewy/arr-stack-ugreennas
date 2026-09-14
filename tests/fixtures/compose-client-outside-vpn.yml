@@ -1,0 +1,8 @@
+# Fixture for tests/compose-validation.bats: a download client with no
+# network_mode binding. The tunnelled-clients check must reject this.
+name: fixture
+services:
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:5.1.2
+    container_name: qbittorrent
+    restart: always

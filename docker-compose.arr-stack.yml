@@ -14,18 +14,23 @@
 # already exists. Do not remove them, and do not "tidy" them to match a new
 # project name.
 #
-# A volume declared without `name:` is scoped by the Compose project name,
-# which — with no `name:` key at the top of this file — is derived from the
-# directory the stack is deployed in. So the physical volumes are called
-# arr-stack_<volume>, purely because the deploy directory happens to be
-# named arr-stack.
+# A volume declared without `name:` is scoped by the Compose project name.
+# Before the project name was pinned below, that name was derived from the
+# deploy directory — the physical volumes are called arr-stack_<volume>
+# purely because the directory happened to be named arr-stack — and a
+# renamed directory made Compose silently create brand-new EMPTY volumes
+# and start every container against them, all reporting healthy with their
+# config gone. Pinning the volume names decouples the data from both the
+# directory and the project name, so neither rename can strand it.
 #
-# That makes the project name load-bearing for data. Rename the deploy
-# directory, or add a `name:` key to this file, and Compose does not error
-# and does not warn — it silently creates a brand-new EMPTY volume and
-# starts the container against it. Every service comes up "healthy" with
-# its config gone. Pinning the names here decouples the data from the
-# directory, so a rename is survivable.
+# The project name is pinned too, and shared with docker-compose.traefik.yml
+# and docker-compose.utilities.yml on purpose: the three files are one
+# project, which is why `--remove-orphans` on any of them deletes the
+# others' containers (CLAUDE.md). tests/compose-validation.bats holds the
+# expected names. To keep a different project name on an existing deploy,
+# set COMPOSE_PROJECT_NAME in .env — the environment overrides this key.
+name: arr-stack
+
 volumes:
   gluetun-config:
     name: arr-stack_gluetun-config
