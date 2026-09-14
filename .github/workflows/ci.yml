@@ -74,6 +74,16 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Pull the tool images (retried — a registry hiccup must not fail a required check)
+        run: |
+          for img in rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 hadolint/hadolint:v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d; do
+            for attempt in 1 2 3 4; do
+              docker pull -q "$img" && break
+              echo "pull of $img failed (attempt $attempt); retrying in $((attempt * 15))s"
+              sleep $((attempt * 15))
+            done
+            docker image inspect "$img" >/dev/null 2>&1 || { echo "::error::could not pull $img after 4 attempts"; exit 1; }
+          done
       - name: actionlint — the workflows themselves
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -color
       - name: hadolint — the devcontainer Dockerfile (policy in .hadolint.yaml)
@@ -91,6 +101,16 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Pull the tool images (retried — a registry hiccup must not fail a required check)
+        run: |
+          for img in anchore/syft:v1.51.1@sha256:95fe0835e5bebc6f8b1f8acef68d47d63d594ef4c0f25c097ff853b23cbac74c aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969; do
+            for attempt in 1 2 3 4; do
+              docker pull -q "$img" && break
+              echo "pull of $img failed (attempt $attempt); retrying in $((attempt * 15))s"
+              sleep $((attempt * 15))
+            done
+            docker image inspect "$img" >/dev/null 2>&1 || { echo "::error::could not pull $img after 4 attempts"; exit 1; }
+          done
       - name: SBOM (syft — SPDX and CycloneDX)
         run: |
           docker run --rm -v "$PWD:/repo" -w /repo \
@@ -120,6 +140,16 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Pull the tool images (retried — a registry hiccup must not fail a required check)
+        run: |
+          for img in aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969; do
+            for attempt in 1 2 3 4; do
+              docker pull -q "$img" && break
+              echo "pull of $img failed (attempt $attempt); retrying in $((attempt * 15))s"
+              sleep $((attempt * 15))
+            done
+            docker image inspect "$img" >/dev/null 2>&1 || { echo "::error::could not pull $img after 4 attempts"; exit 1; }
+          done
       - name: Scan every image the compose files pin
         # Never fails the job: an upstream CVE is input to the next image bump,
         # not a reason to block a docs change. The report is the artifact.
