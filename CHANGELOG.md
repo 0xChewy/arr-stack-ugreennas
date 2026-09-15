@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.13.4] - 2026-09-15
+
+### Changed
+- **Jellyfin's TV library runs TheTVDB first.** Jellyfin ships with only TMDB, and TMDB's split anthology entries can carry the anthology's TVDB id: Sonarr's *Monster (2022) [tvdbid-389492]* folder was identified as *Monster: The Lizzie Borden Story*, with her posters and title over the Ed Gein episodes and the anthology's cast underneath. APP-CONFIG.md §4.1 now installs the TheTVDB plugin, puts it first for Series, Seasons and Episodes, and turns on season-name import so anthology seasons label themselves. Docs only; the setting lives in Jellyfin, not in the compose files or the configure script.
+
 ## [1.13.3] - 2026-09-15
 
 ### Added
