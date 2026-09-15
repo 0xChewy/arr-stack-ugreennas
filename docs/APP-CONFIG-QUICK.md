@@ -82,6 +82,7 @@ The script handles qBittorrent, Sonarr, Radarr, Prowlarr, and Bazarr. Complete t
 
 - Movies → Content type "Movies" → Folder `/data/media/movies`
 - TV Shows → Content type "Shows" → Folder `/data/media/tv`
+- Dashboard → Plugins → Catalog → install **TheTVDB** and restart; tick **Import season name** in its settings; then in the TV library's settings move **TheTVDB** above TheMovieDb for Series, Seasons and Episodes (metadata and images) — Sonarr files shows by TVDB, and TMDB alone mislabels split anthologies ([why](APP-CONFIG.md#41-jellyfin-media-server))
 
 > **Optional:** [Enable hardware transcoding](APP-CONFIG-ADVANCED.md#hardware-transcoding-intel-quick-sync) for GPU-accelerated playback (recommended for Ugreen NAS).
 

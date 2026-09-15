@@ -40,6 +40,10 @@ docker compose -f docker-compose.arr-stack.yml up -d  # Restarts containers with
 
 When upgrading across versions, check below for any action required.
 
+### v1.13.3 → v1.13.4
+
+Nothing to recreate; one Jellyfin setup step, described in [APP-CONFIG.md §4.1 step 4](APP-CONFIG.md#41-jellyfin-media-server): install the TheTVDB plugin, restart, tick *Import season name*, and move TheTVDB above TheMovieDb for Series, Seasons and Episodes in the TV library. Shows already in the library keep their current metadata and artwork; refresh an individual show with *Replace all images* if TMDB had mislabelled it.
+
 ### v1.13.2 → v1.13.3
 
 Nothing to recreate. `configure-apps.sh` gained a Seerr step that points its TV and anime metadata at TVDB, so the seasons Seerr offers are the seasons Sonarr fetches. Apply it to a running stack with:
