@@ -317,6 +317,37 @@ test.describe('API assertions', () => {
     }
   });
 
+  // configure-apps.sh points Seerr's TV and anime metadata at TVDB so the
+  // seasons it offers are the seasons Sonarr (TVDB-only) will fetch. TMDB
+  // splits some shows that TVDB files as one anthology; with TMDB metadata a
+  // request for "Season 1" of the split entry fetched the wrong season of the
+  // anthology, or nothing (Monster: The Ed Gein Story, 2026-09-15). The
+  // setting is a single JSON field that a Seerr reinstall or a wizard re-run
+  // resets, and nothing else would notice.
+  test('Seerr — TV and anime metadata come from TVDB', async ({ request }) => {
+    requireStackReachable(test.skip);
+
+    let seerrKey: string;
+    try {
+      seerrKey = dockerExec('seerr', [
+        'node',
+        '-e',
+        'console.log(require("/app/config/settings.json").main.apiKey)',
+      ]).trim();
+    } catch (err) {
+      throw new Error(`could not read Seerr's own API key from the container: ${err}`);
+    }
+    expect(seerrKey.length).toBeGreaterThan(0);
+
+    const res = await request.get(url('seerr', '/api/v1/settings/metadatas'), {
+      headers: { 'X-Api-Key': seerrKey },
+    });
+    expect(res.ok(), `could not read Seerr's metadata providers (HTTP ${res.status()})`).toBeTruthy();
+    const providers: { tv: string; anime: string } = await res.json();
+    expect(providers.tv, 'Seerr takes TV metadata from TMDB; run configure-apps.sh --only seerr').toBe('tvdb');
+    expect(providers.anime, 'Seerr takes anime metadata from TMDB; run configure-apps.sh --only seerr').toBe('tvdb');
+  });
+
   test("Bazarr — the Sonarr/Radarr keys it stores are the current ones", async ({ request }) => {
     const bazarrKey = process.env.BAZARR_API_KEY;
     const sonarrKey = process.env.SONARR_API_KEY;

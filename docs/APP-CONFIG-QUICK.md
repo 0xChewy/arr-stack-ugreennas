@@ -2,7 +2,7 @@
 
 > Return to [Setup Guide](SETUP.md) · [Manual setup instead?](APP-CONFIG.md)
 
-The [configure-apps.sh](../scripts/configure-apps.sh) script automates ~30 configuration steps across qBittorrent, SABnzbd, Sonarr, Radarr, Prowlarr, Bazarr and Pi-hole — root folders, download clients, naming schemes, NFO metadata, custom formats, delay profiles, subtitle sync and languages, qBittorrent's executable exclusion list, and more. `--dry-run` shows exactly what would change on your stack.
+The [configure-apps.sh](../scripts/configure-apps.sh) script automates ~30 configuration steps across qBittorrent, SABnzbd, Sonarr, Radarr, Prowlarr, Bazarr, Seerr and Pi-hole — root folders, download clients, naming schemes, NFO metadata, custom formats, delay profiles, subtitle sync and languages, qBittorrent's executable exclusion list, Seerr's TVDB metadata provider, and more. `--dry-run` shows exactly what would change on your stack.
 
 > **Note:** This script is LLM-generated and human-reviewed. Best not to blindly run scripts from the internet — review [configure-apps.sh](../scripts/configure-apps.sh) for security before running it.
 
@@ -111,6 +111,7 @@ Config (⚙️) → Folders → set **absolute paths**:
    - External URL: `http://sonarr.lan` (or `http://NAS_IP:8989`)
 6. Settings → Jellyfin → toggle **Movies** and **TV** on → Save
 7. Click **Sync Libraries** then **Start Scan**
+8. Re-run `./scripts/configure-apps.sh --only seerr` — it can only reach Seerr once the wizard has run, and it sets series metadata to TVDB so the seasons Seerr offers are the ones Sonarr fetches ([why](APP-CONFIG.md#47-seerr-request-manager))
 
 > **Hostnames, not `gluetun`:** Sonarr and Radarr sit on the `arr-stack` bridge with their own Docker DNS names, so Seerr reaches them directly. `gluetun` only works for services genuinely inside the VPN namespace — qBittorrent and SABnzbd — and it refuses connections on 8989/7878.
 
