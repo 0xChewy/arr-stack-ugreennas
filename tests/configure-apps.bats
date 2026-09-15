@@ -14,6 +14,7 @@ setup() {
     assert_output --partial "What stays manual after this script"
     assert_output --partial "SABnzbd: usenet provider credentials"
     assert_output --partial "--only <section>"
+    assert_output --partial "prowlarr, bazarr, seerr or pihole"
     assert_output --partial "SUBTITLE_LANGUAGES"
     refute_output --partial "SCRIPT_DIR="
 }
@@ -42,6 +43,29 @@ setup() {
 @test "the Bazarr section never restarts the container" {
     run grep -n 'docker restart "\$BAZARR_CONTAINER"' "$SCRIPT"
     assert_failure
+}
+
+# Seerr's metadata-provider PUT (v3.4.1) tests its TVDB connection, saves,
+# and only then answers 200 — but that is the handler's behaviour, not a
+# contract, and a 2xx from a write that stored something else would count as
+# configured forever. The section must read the setting back after the write
+# and report from that, the way the SABnzbd section does.
+@test "the Seerr section reads the metadata setting back after writing it" {
+    local read_line put_line readback_line
+    read_line=$(grep -n 'api_get "${BASE}/api/v1/settings/metadatas"' "$SCRIPT" | head -1 | cut -d: -f1)
+    put_line=$(grep -n 'api_put "${BASE}/api/v1/settings/metadatas"' "$SCRIPT" | head -1 | cut -d: -f1)
+    readback_line=$(grep -n 'api_get "${BASE}/api/v1/settings/metadatas"' "$SCRIPT" | sed -n 2p | cut -d: -f1)
+    [ -n "$read_line" ] && [ -n "$put_line" ] && [ -n "$readback_line" ]
+    [ "$read_line" -lt "$put_line" ]
+    [ "$put_line" -lt "$readback_line" ]
+}
+
+@test "--only seerr requires only the seerr container, never gluetun" {
+    # The section talks to Seerr on the bridge. Demanding gluetun (the
+    # default for an unlisted section) would refuse to run it during a VPN
+    # outage — the one time nothing else in the stack can be configured.
+    run grep -nE '^\s*seerr\)\s+REQUIRED_CONTAINERS="seerr"' "$SCRIPT"
+    assert_success
 }
 
 @test "every curl in the script is bounded" {

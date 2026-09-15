@@ -40,6 +40,17 @@ docker compose -f docker-compose.arr-stack.yml up -d  # Restarts containers with
 
 When upgrading across versions, check below for any action required.
 
+### v1.13.2 → v1.13.3
+
+Nothing to recreate. `configure-apps.sh` gained a Seerr step that points its TV and anime metadata at TVDB, so the seasons Seerr offers are the seasons Sonarr fetches. Apply it to a running stack with:
+
+```bash
+cd $NAS_STACK_DIR && git pull
+./scripts/configure-apps.sh --only seerr
+```
+
+It is idempotent and touches nothing else. Anime that Seerr previously showed as one season may now show several (TVDB's numbering, which is what Sonarr uses); existing requests are unaffected.
+
 ### v1.13.1 → v1.13.2
 
 Nothing to recreate: this release adds a script, tests and docs. `git pull` and carry on. If you want audiobooks on the Jellyfin TV app, add the Music library and the cron entry described in [MAINTENANCE.md](MAINTENANCE.md#audiobooks-on-the-tv) — both are opt-in; the web's Books library is unchanged.

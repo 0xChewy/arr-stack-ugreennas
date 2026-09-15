@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.13.3] - 2026-09-15
+
+### Added
+- **Seerr takes series metadata from TVDB.** Seerr searches TMDB, Sonarr speaks only TVDB, and they disagree on how some shows are cut up: TMDB follows the streamer's marketing (three separate *Monster* series), TVDB files one anthology with four seasons, and release groups name files by TVDB. With TMDB metadata Seerr asked Sonarr for "Season 1" of the split entry — the wrong season of the anthology, or nothing — so a show that looked fine on the page failed after the click (*Monster: The Ed Gein Story*, added in Sonarr by hand). `configure-apps.sh` now has a Seerr section (`--only seerr`) that sets both the TV and anime provider to TVDB, reads the value back rather than trusting the write, and skips when the wizard hasn't run yet; bats checks the read-back and that the section never demands gluetun, and the e2e suite asserts the live setting. Documented in APP-CONFIG.md with the failure it prevents and the one it can't (a show TVDB files only as someone else's season still needs Sonarr directly).
+
 ## [1.13.2] - 2026-09-14
 
 ### Added

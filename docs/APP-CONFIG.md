@@ -306,8 +306,11 @@ Lets users browse and request movies/TV shows.
      - **External URL:** `http://sonarr.lan` (or `http://NAS_IP:8989`)
 5. **Enable Jellyfin Libraries:** Settings → Jellyfin → toggle **Movies** and **TV** on → Save
 6. **Sync Libraries:** On the same page, click **Sync Libraries** then **Start Scan**
+7. **Take series metadata from TVDB:** Settings → Metadata → set both **TV Series** and **Anime** to **TheTVDB** → Save. `configure-apps.sh` does this for you (`--only seerr` to run just that step).
 
 > **Why libraries matter:** Without this, Seerr doesn't know what's already in your Jellyfin library. Movies and shows will stay stuck at "Requested" even after they're downloaded and playable.
+
+> **Why TVDB:** Seerr searches TMDB, but Sonarr only knows TVDB, and the two disagree on how some shows are cut up — TMDB follows the streamer's marketing (three separate *Monster* series), TVDB follows the production (one anthology, four seasons), and release groups name files by TVDB. With TMDB metadata, Seerr shows TMDB's seasons and asks Sonarr for them by number, so "Season 1" of a split entry fetches the wrong season of the anthology, or nothing: the show looks fine on the page and the request fails after the click. Anime, where TMDB often has one season to TVDB's several, is the usual victim. With TVDB metadata the seasons Seerr offers are the seasons Sonarr will fetch. Search stays on TMDB, so a show whose TMDB entry has no TVDB link still asks you to pick the match — but the seasons offered after that are TVDB's. If the right show isn't in that list at all (TVDB files it as a season of something else), add it in Sonarr directly and monitor only that season.
 
 ## 4.8 Bazarr (Subtitles)
 
