@@ -13,26 +13,31 @@
 # Access: traefik.lan | traefik.yourdomain.com | NAS_IP:9090
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# One project with docker-compose.arr-stack.yml — see the note there.
+name: arr-stack
+
 services:
   traefik:
-    image: traefik:v3.0
+    image: traefik:v3.7
     container_name: traefik
     restart: always
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       arr-stack:
         ipv4_address: 172.20.0.2
       # macvlan gives Traefik its own LAN IP where it can use port 80
       # (NAS owns port 80 on its IP, but Traefik owns it on TRAEFIK_LAN_IP)
       traefik-lan:
-        ipv4_address: ${TRAEFIK_LAN_IP:-10.10.0.11}
-        mac_address: ${TRAEFIK_LAN_MAC:-02:42:0a:0a:00:0b}
+        ipv4_address: ${TRAEFIK_LAN_IP}
+        mac_address: ${TRAEFIK_LAN_MAC}
     ports:
       # Dashboard only - HTTP served via macvlan IP on port 80
       - "9090:8080" # Traefik Dashboard
     environment:
-      - TZ=${TZ:-Europe/London}
+      - TZ=${TZ}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/traefik.yml:/traefik.yml:ro
@@ -50,12 +55,17 @@ services:
       # Dashboard authentication
       # Generate with: htpasswd -nbB admin 'YOUR_PASSWORD'
       - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
       interval: 30s
-      timeout: 10s
+      timeout: 30s
       retries: 3
-      start_period: 40s
+      start_period: 60s
 
 networks:
   arr-stack:
@@ -65,8 +75,8 @@ networks:
   traefik-lan:
     driver: macvlan
     driver_opts:
-      parent: ${LAN_INTERFACE:-eth0}  # Network interface - check with: ip link show
+      parent: ${LAN_INTERFACE}  # Network interface - check with: ip link show
     ipam:
       config:
-        - subnet: ${LAN_SUBNET:-10.10.0.0/24}
-          gateway: ${LAN_GATEWAY:-10.10.0.1}
+        - subnet: ${LAN_SUBNET}
+          gateway: ${LAN_GATEWAY}

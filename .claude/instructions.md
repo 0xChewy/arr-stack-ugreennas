@@ -1,6 +1,43 @@
 # Project Instructions for Claude Code
 
-This file provides context for Claude Code to assist with this project.
+## ⚠️ FIRST: NAS SSH Access
+
+**Before ANY SSH command, read `config.local.md` for credentials.**
+
+```bash
+# Pattern for ALL NAS commands:
+sshpass -p 'PASSWORD' ssh USER@HOST "COMMAND"
+
+# With sudo:
+sshpass -p 'PASSWORD' ssh USER@HOST "echo 'PASSWORD' | sudo -S COMMAND"
+```
+
+**NEVER guess usernames or try random SSH keys. The credentials are in `config.local.md`.**
+
+---
+
+## What This Project Is
+
+A Docker Compose media automation stack **that runs on a NAS**, not on this local machine. Users request TV shows/movies via Seerr → Sonarr/Radarr search for them → qBittorrent/SABnzbd download them (through VPN) → media appears in Jellyfin ready to watch.
+
+**⚠️ IMPORTANT: This repo is the SOURCE CODE. The stack RUNS on a remote NAS.**
+- Local machine (where Claude Code runs): Development, editing config files
+- NAS (remote): Where Docker containers actually run
+- **All `docker` commands must be run via SSH to the NAS** - they won't work locally
+- See `config.local.md` for NAS hostname/IP and SSH credentials
+
+**Key services:**
+- **Jellyfin** - Media server (like Netflix for your own content)
+- **Seerr** - Request portal for users to ask for shows/movies
+- **Sonarr/Radarr** - TV/Movie managers that find and organize downloads
+- **Prowlarr** - Indexer manager (finds download sources)
+- **qBittorrent** - Torrent client (downloads via VPN)
+- **SABnzbd** - Usenet client (downloads via VPN)
+- **Gluetun** - VPN gateway container (protects all download traffic)
+- **Pi-hole** - DNS server (enables `.lan` domains, blocks ads)
+- **Traefik** - Reverse proxy (routes `sonarr.lan` → correct container)
+
+**Networking:** Services behind VPN share Gluetun's network (`network_mode: service:gluetun`). They reach each other via `localhost`. Services outside the VPN reach them via `gluetun` hostname.
 
 ---
 
@@ -43,7 +80,7 @@ Forbidden in tracked files: API keys, passwords, tokens, private keys, public IP
 | Location | Purpose |
 |----------|---------|
 | Git repo (local) | Development |
-| Git repo (NAS: `/volume1/docker/arr-stack/`) | Deployment via `git pull` |
+| Git repo (NAS: `$NAS_STACK_DIR/`) | Deployment via `git pull` |
 
 **Deployed via git**: `docker-compose.*.yml`, `traefik/`, `scripts/`, `.claude/instructions.md`
 **Gitignored but required on NAS**: `.env` (manual setup), app data directories
@@ -58,11 +95,11 @@ Forbidden in tracked files: API keys, passwords, tokens, private keys, public IP
 git add -A && git commit -m "..." && git push
 
 # 2. Pull on NAS
-ssh <user>@<nas-host> "cd /volume1/docker/arr-stack && git pull"
+ssh <user>@<nas-host> "cd $NAS_STACK_DIR && git pull"
 
 # 3. Restart affected services
 ssh <user>@<nas-host> "docker restart traefik"  # For routing changes
-ssh <user>@<nas-host> "cd /volume1/docker/arr-stack && docker compose -f docker-compose.arr-stack.yml up -d"  # For compose changes
+ssh <user>@<nas-host> "cd $NAS_STACK_DIR && docker compose -f docker-compose.arr-stack.yml up -d"  # For compose changes
 ```
 
 ## NAS Access
@@ -94,7 +131,7 @@ VPN services (Sonarr, Radarr, Prowlarr, qBittorrent, SABnzbd) use `network_mode:
 | Route | Use |
 |-------|-----|
 | VPN → VPN (Sonarr/Radarr → qBittorrent) | `localhost` |
-| Non-VPN → VPN (Jellyseerr → Sonarr) | `gluetun` |
+| Non-VPN → VPN (Seerr → Sonarr) | `gluetun` |
 | Any → Non-VPN (Any → Jellyfin) | container name |
 
 **Download client config**: Sonarr/Radarr → qBittorrent: Host=`localhost`, Port=`8085`. SABnzbd: Host=`localhost`, Port=`8080`.
@@ -122,10 +159,10 @@ Routes defined in `traefik/dynamic/vpn-services.yml`, NOT Docker labels.
 Docker labels are minimal (`traefik.enable=true`, `traefik.docker.network=arr-stack`). To add routes, edit `vpn-services.yml`.
 
 **Remote vs Local-only services:**
-- **Remote** (via Cloudflare Tunnel): Jellyfin, Jellyseerr, WireGuard, Traefik dashboard
+- **Remote** (via Cloudflare Tunnel): Jellyfin, Seerr, WireGuard, Traefik dashboard
 - **Local-only** (NAS_IP:PORT or via WireGuard): Sonarr, Radarr, Prowlarr, qBittorrent, Bazarr, Pi-hole, Uptime Kuma, duc
 
-Why local-only? These services default to "no login from local network". Cloudflare Tunnel traffic appears local, bypassing auth. Use Jellyseerr for remote media requests.
+Why local-only? These services default to "no login from local network". Cloudflare Tunnel traffic appears local, bypassing auth. Use Seerr for remote media requests.
 
 ## Cloudflare Tunnel
 
@@ -162,11 +199,11 @@ If Pi-hole is down and you've lost DNS:
 1. **Connect to mobile hotspot** (different network, uses mobile DNS)
 2. **SSH to NAS using IP address** (not hostname):
    ```bash
-   ssh <user>@<NAS_IP>  # e.g., ssh mooseadmin@192.168.0.136
+   ssh <user>@<NAS_IP>  # e.g., ssh nasadmin@192.168.1.10
    ```
 3. **Start the stack**:
    ```bash
-   cd /volume1/docker/arr-stack && docker compose -f docker-compose.arr-stack.yml up -d
+   cd $NAS_STACK_DIR && docker compose -f docker-compose.arr-stack.yml up -d
    ```
 4. **Wait 30 seconds**, reconnect to home WiFi - DNS restored
 
@@ -174,20 +211,27 @@ If Pi-hole is down and you've lost DNS:
 
 ### Pi-hole Configuration
 
-Uses `pihole.toml`, NOT `custom.list`.
+**⚠️ CRITICAL: Don't duplicate .lan domains**
 
+Stack `.lan` domains are defined in `pihole/dnsmasq.d/02-local-dns.conf` (dnsmasq config). User-specific domains can go in either:
+- `02-local-dns.conf` (CLI)
+- Pi-hole web UI (Local DNS → DNS Records) → writes to `pihole.toml`
+
+**Never define the same domain in both places.** If both dnsmasq and pihole.toml define a domain with different IPs, resolution is unpredictable.
+
+**Adding stack .lan domains** (use dnsmasq):
 ```bash
-# Edit hosts array (~line 129) in container:
-docker exec pihole sed -n '129p' /etc/pihole/pihole.toml
-# Then: docker restart pihole
+# On NAS - edit the config file
+nano $NAS_STACK_DIR/pihole/dnsmasq.d/02-local-dns.conf
+
+# Add your entry
+address=/myservice.lan/192.168.1.XX
+
+# Restart to pick up bind-mount changes (reloaddns alone is NOT enough)
+docker restart pihole
 ```
 
 **TLDs**: `.local` fails in Docker (mDNS reserved). Use `.lan` for local DNS.
-
-**Docker services for VPN-routed containers**: Add to Pi-hole so Prowlarr/Sonarr/Radarr can resolve them:
-```
-172.20.0.10 flaresolverr.lan
-```
 
 ## Architecture
 
@@ -209,8 +253,7 @@ docker exec pihole sed -n '129p' /etc/pihole/pihole.toml
 | Pi-hole | v6 API uses password not separate token |
 | Gluetun | VPN gateway. Services using it share IP 172.20.0.3. Uses Pi-hole DNS. `FIREWALL_OUTBOUND_SUBNETS` must include LAN for HA access |
 | Cloudflared | SSL terminated at Cloudflare, Traefik receives HTTP |
-| wg-easy | Generate hash: `docker run --rm ghcr.io/wg-easy/wg-easy wgpw 'PASSWORD'` |
-| FlareSolverr | Cloudflare bypass for Prowlarr. Configure in Prowlarr: Settings → Indexers → add FlareSolverr with Host `flaresolverr.lan` |
+| FlareSolverr | Cloudflare bypass for Prowlarr (via Gluetun VPN). Configure in Prowlarr: Settings → Indexers → add FlareSolverr with Host `localhost:8191` |
 
 ## Container Updates
 
@@ -229,7 +272,7 @@ UGOS handles automatic updates natively (no Watchtower needed):
 
 Cron runs daily at 6am:
 ```
-0 6 * * * /volume1/docker/arr-stack/scripts/backup-volumes.sh --tar /mnt/arr-backup >> /var/log/arr-backup.log 2>&1
+0 6 * * * $NAS_STACK_DIR/scripts/backup-volumes.sh --tar /mnt/arr-backup >> /var/log/arr-backup.log 2>&1
 ```
 
 **How it works:**
@@ -246,7 +289,7 @@ Cron runs daily at 6am:
 
 ```bash
 # Run backup manually on NAS
-ssh <user>@<nas-host> "cd /volume1/docker/arr-stack && ./scripts/backup-volumes.sh --tar"
+ssh <user>@<nas-host> "cd $NAS_STACK_DIR && ./scripts/backup-volumes.sh --tar"
 
 # Pull from /tmp to local repo (gitignored backups/ folder)
 ssh <user>@<nas-host> "cat /tmp/arr-stack-backup-*.tar.gz" > backups/arr-stack-backup-$(date +%Y%m%d).tar.gz
@@ -257,7 +300,7 @@ ssh <user>@<nas-host> "cat /mnt/arr-backup/arr-stack-backup-*.tar.gz" > backups/
 
 ### What's Backed Up
 
-**Included** (~13MB compressed): gluetun, qbittorrent, prowlarr, bazarr, wireguard, uptime-kuma, pihole-dnsmasq, jellyseerr, sabnzbd configs.
+**Included** (~13MB compressed): gluetun, qbittorrent, prowlarr, bazarr, wireguard, uptime-kuma, pihole-dnsmasq, seerr, sabnzbd configs.
 
 **Excluded** (regeneratable): jellyfin-config (407MB), sonarr (43MB), radarr (110MB), pihole blocklists (138MB).
 
@@ -268,9 +311,13 @@ ssh <user>@<nas-host> "cat /mnt/arr-backup/arr-stack-backup-*.tar.gz" > backups/
 docker exec uptime-kuma sqlite3 /app/data/kuma.db "SELECT id, name, url FROM monitor"
 ```
 
-**Update monitor URL:**
+**Rename or update a monitor:**
 ```bash
+# Rename
+docker exec uptime-kuma sqlite3 /app/data/kuma.db "UPDATE monitor SET name='NewName' WHERE id=ID"
+# Update URL
 docker exec uptime-kuma sqlite3 /app/data/kuma.db "UPDATE monitor SET url='http://NEW_URL' WHERE id=ID"
+# Restart to pick up changes (live-reloads the DB)
 docker restart uptime-kuma
 ```
 
@@ -309,7 +356,7 @@ This pattern is used in `scripts/lib/check-env-backup.sh` and `check-uptime-moni
 
 To add `.lan` domains for services outside this stack (e.g., Frigate, Home Assistant):
 
-**1. Add DNS entry** (gitignored `pihole/02-local-dns.conf`):
+**1. Add DNS entry** (gitignored `pihole/dnsmasq.d/02-local-dns.conf`):
 ```
 address=/frigate.lan/TRAEFIK_LAN_IP
 ```
@@ -344,25 +391,47 @@ docker exec pihole pihole restartdns
 **Bcrypt hashes must be quoted** (they contain `$` which Docker interprets as variables):
 ```bash
 # Wrong
-WG_PASSWORD_HASH=$2a$12$abc...
 TRAEFIK_DASHBOARD_AUTH=admin:$2y$05$abc...
 
 # Correct
-WG_PASSWORD_HASH='$2a$12$abc...'
 TRAEFIK_DASHBOARD_AUTH='admin:$2y$05$abc...'
 ```
 
+## Troubleshooting: SABnzbd Stuck Downloads
+
+If a movie/show shows "Downloading" in Radarr at 100% but has 0 B file size:
+
+1. Check for `_UNPACK_*` directory buildup in `/volume1/Media/downloads/` — each is a failed unpack retry wasting 20-50 GB
+2. The actual completed file is usually in `/volume1/Media/downloads/incomplete/<release>/` with an obfuscated filename
+3. SABnzbd UI/API will likely be unresponsive (locked by the post-processing loop)
+4. Fix: `docker stop sabnzbd` → delete `postproc2.sab` from admin dir → delete `_UNPACK_*` dirs → move file to movie folder → `docker start sabnzbd` → clear Radarr queue → trigger RefreshMovie
+5. Key lesson: the SABnzbd history API delete does NOT clear the postproc queue — must delete `postproc2.sab` while stopped
+6. See `docs/TROUBLESHOOTING.md` for full step-by-step
+
+**SABnzbd API** (via container): `http://localhost:8080/api?apikey=KEY&mode=history&output=json`
+**Radarr API** (via container): `http://localhost:7878/api/v3/...?apikey=KEY`
+
 ## GitHub Releases
+
+**⚠️ CRITICAL: Always update CHANGELOG.md when creating a release.**
+
+Update `CHANGELOG.md` BEFORE creating the GitHub release. The changelog is the permanent record; GitHub releases can change but the changelog is in the repo.
 
 When creating release notes:
 - Link to `docs/UPGRADING.md` for upgrade instructions instead of inline steps
 - Keep notes concise - bullet points, not paragraphs
 - Don't mention Reddit/community feedback as motivation for changes
 
-When updating a release tag to a new commit:
-1. Delete the GitHub release first: `gh release delete v1.x`
-2. Delete and recreate the tag: `git tag -d v1.x && git tag v1.x`
-3. Push tag: `git push origin :refs/tags/v1.x && git push origin v1.x`
-4. Create new release: `gh release create v1.x --title "..." --notes "..."`
+**⚠️ CRITICAL: Force-pushing a tag resets the GitHub release to Draft status.**
 
-**Never** just move the tag - this orphans the release and breaks the GitHub UI.
+When updating a release tag to a new commit:
+```bash
+# Move tag to new commit
+git tag -d v1.x && git tag v1.x
+git push origin :refs/tags/v1.x && git push origin v1.x
+
+# REQUIRED: Fix the release status (force-push sets it to Draft)
+gh release edit v1.x --draft=false --latest
+```
+
+**Always run `gh release edit` after force-pushing a tag.** Without it, the release stays Draft and won't show as Latest.

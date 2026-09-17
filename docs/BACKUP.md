@@ -18,18 +18,17 @@ For the automated daily backup to work, plug a USB drive into your NAS:
 
 ## What Gets Backed Up
 
-The backup script (`scripts/backup-volumes.sh`) backs up **essential configs only** - small files that are hard to recreate:
+The backup script (`scripts/arr-backup.sh`) backs up **essential configs only** - small files that are hard to recreate:
 
 | Volume | Size | Contents |
 |--------|------|----------|
 | gluetun-config | ~7MB | VPN provider settings |
 | qbittorrent-config | ~9MB | Client settings, categories |
+| sabnzbd-config | <1MB | Usenet provider credentials and settings |
 | prowlarr-config | ~22MB | Indexer configs, API keys |
 | bazarr-config | ~2MB | Subtitle provider credentials |
-| wireguard-easy-config | ~8KB | VPN peer configs (critical!) |
 | uptime-kuma-data | ~14MB | Monitor configurations |
-| pihole-etc-dnsmasq | ~4KB | Custom DNS settings |
-| jellyseerr-config | ~5MB | User accounts, requests |
+| seerr-config | ~5MB | User accounts, requests |
 
 **Total: ~60MB uncompressed, ~13MB compressed**
 
@@ -56,8 +55,8 @@ Large volumes that regenerate automatically are excluded:
 
 ```bash
 # SSH into your NAS first, then:
-cd /volume1/docker/arr-stack
-./scripts/backup-volumes.sh --tar
+cd $NAS_STACK_DIR
+./scripts/arr-backup.sh --tar
 ```
 
 Output:
@@ -122,15 +121,15 @@ scp user@nas:/tmp/arr-stack-backup-*.tar.gz ./backup.tar.gz
 ### Single Volume Restore
 
 ```bash
-# On NAS via SSH - example: restore jellyseerr config
-docker compose -f docker-compose.arr-stack.yml stop jellyseerr
+# On NAS via SSH - example: restore seerr config
+docker compose -f docker-compose.arr-stack.yml stop seerr
 
 docker run --rm \
-  -v ./backup/jellyseerr-config:/source:ro \
-  -v arr-stack_jellyseerr-config:/dest \
+  -v ./backup/seerr-config:/source:ro \
+  -v arr-stack_seerr-config:/dest \
   alpine cp -a /source/. /dest/
 
-docker compose -f docker-compose.arr-stack.yml start jellyseerr
+docker compose -f docker-compose.arr-stack.yml start seerr
 ```
 
 ---
@@ -138,16 +137,16 @@ docker compose -f docker-compose.arr-stack.yml start jellyseerr
 ## Script Options
 
 ```bash
-./scripts/backup-volumes.sh [OPTIONS] [BACKUP_DIR]
+./scripts/arr-backup.sh [OPTIONS] [BACKUP_DIR]
 
 Options:
   --tar           Create .tar.gz archive (recommended)
   --prefix NAME   Override volume prefix (default: auto-detect)
 
 Examples:
-  ./scripts/backup-volumes.sh --tar                    # Default location
-  ./scripts/backup-volumes.sh --tar /path/to/backup    # Custom location
-  ./scripts/backup-volumes.sh --prefix media-stack     # Custom prefix
+  ./scripts/arr-backup.sh --tar                    # Default location
+  ./scripts/arr-backup.sh --tar /path/to/backup    # Custom location
+  ./scripts/arr-backup.sh --prefix media-stack     # Custom prefix
 ```
 
 ### Volume Prefix Auto-Detection
@@ -156,14 +155,14 @@ The script auto-detects your volume prefix from running containers. If you clone
 
 If auto-detection fails, use `--prefix`:
 ```bash
-./scripts/backup-volumes.sh --tar --prefix media-stack
+./scripts/arr-backup.sh --tar --prefix media-stack
 ```
 
-### Jellyfin vs Plex
+### Request Manager Detection
 
-The script auto-detects which variant you're using and backs up the appropriate request manager:
-- Jellyfin stack: `jellyseerr-config`
-- Plex stack: `overseerr-config`
+The script auto-detects which request manager volume exists and backs it up:
+- `seerr-config` (Seerr)
+- `overseerr-config` (Overseerr, if used instead)
 
 ---
 
@@ -176,7 +175,7 @@ A cron job runs daily at 6am, backing up to USB:
 sudo crontab -l
 
 # Default schedule (already configured):
-0 6 * * * /volume1/docker/arr-stack/scripts/backup-volumes.sh --tar /mnt/arr-backup >> /var/log/arr-backup.log 2>&1
+0 6 * * * $NAS_STACK_DIR/scripts/arr-backup.sh --tar /mnt/arr-backup >> /var/log/arr-backup.log 2>&1
 ```
 
 **Features:**

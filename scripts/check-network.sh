@@ -4,16 +4,15 @@
 # Run this before deployment if you've had failed attempts.
 # Usage: ./scripts/check-network.sh
 
-set -e
+set -euo pipefail
 
 # Color output (disabled if not interactive)
 if [[ -t 1 ]]; then
-    RED='\033[0;31m'
     GREEN='\033[0;32m'
     YELLOW='\033[1;33m'
     NC='\033[0m'
 else
-    RED='' GREEN='' YELLOW='' NC=''
+    GREEN='' YELLOW='' NC=''
 fi
 
 echo ""

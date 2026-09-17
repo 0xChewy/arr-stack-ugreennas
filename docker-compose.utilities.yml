@@ -8,9 +8,26 @@
 #########################
 # Volumes               #
 #########################
+# Pinned to their existing physical names for the same reason as the volumes
+# in docker-compose.arr-stack.yml — see the long comment there. Short version:
+# without `name:`, the physical volume is named after the deploy directory,
+# so renaming that directory silently swaps in empty volumes rather than
+# failing. These carry the Uptime Kuma history, Beszel metrics and diun's
+# seen-tags DB, all of which are annoying to lose and easy to lose silently.
+# One project with docker-compose.arr-stack.yml — see the note there.
+name: arr-stack
+
 volumes:
   duc-index:
+    name: arr-stack_duc-index
   uptime-kuma-data:
+    name: arr-stack_uptime-kuma-data
+  beszel-data:
+    name: arr-stack_beszel-data
+  diun-data:
+    name: arr-stack_diun-data
+  configarr-repos:
+    name: arr-stack_configarr-repos
 
 #########################
 # Networks              #
@@ -29,6 +46,15 @@ x-logging: &default-logging
     max-file: "3"
 
 #########################
+# Security Defaults     #
+#########################
+x-security: &default-security
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+#########################
 # Services              #
 #########################
 services:
@@ -38,12 +64,13 @@ services:
   # No web UI. Runs silently in background.
   # ═══════════════════════════════════════════════════════════════════════════
   deunhealth:
-    image: qmcgaw/deunhealth
+    image: qmcgaw/deunhealth:v0.3.0
     container_name: deunhealth
+    <<: *default-security
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      - TZ=${TZ:-Europe/London}
+      - TZ=${TZ}
     restart: always
     logging: *default-logging
     healthcheck:
@@ -54,17 +81,103 @@ services:
       start_period: 10s
 
   # ═══════════════════════════════════════════════════════════════════════════
+  # GLUETUN-RECOVER - Closes a gap deunhealth cannot: services that use
+  # network_mode "service:gluetun" lose their network namespace when gluetun
+  # restarts to rebuild its VPN tunnel. Some are SIGKILLed and stay Exited
+  # (docker's restart policy can't rejoin a vanished netns; compose's
+  # depends_on restart:true only fires for compose-driven restarts, not
+  # gluetun's own); others keep RUNNING as zombies on the dead netns, reachable
+  # on localhost but invisible to the rest of the stack. deunhealth restarts
+  # neither (it only touches running-but-*unhealthy* containers, and a zombie's
+  # localhost healthcheck still passes). This watcher restarts any container
+  # labelled gluetun.dependent=true that is Exited OR was started before
+  # gluetun's current start (stale netns), both on startup and each time gluetun
+  # becomes healthy again. No web UI. Runs silently in background.
+  #
+  # KNOWN LIMIT: this only covers a gluetun RESTART. If gluetun is RECREATED
+  # (config change + compose up), dependents still reference the old container
+  # ID and docker restart fails ("joining network namespace ... No such
+  # container") — the watcher logs the failure with the compose command to run.
+  # See TROUBLESHOOTING.md "After a Gluetun RECREATE".
+  # ═══════════════════════════════════════════════════════════════════════════
+  gluetun-recover:
+    image: docker:29.8-cli
+    container_name: gluetun-recover
+    <<: *default-security
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - TZ=${TZ}
+    restart: always
+    logging: *default-logging
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        # A gluetun.dependent container's network namespace is destroyed every
+        # time gluetun (re)starts. Two failure modes follow:
+        #   1. The container is SIGKILLed and stays Exited — docker's restart
+        #      policy can't rejoin a vanished netns. Caught by status=exited.
+        #   2. The container keeps RUNNING as a zombie on the dead netns: alive
+        #      on 127.0.0.1 but unreachable from the rest of the stack. An
+        #      exited-only check misses these — and they are what makes Seerr
+        #      lose Sonarr/Radarr (and Prowlarr lose FlareSolverr) after a VPN
+        #      reconnect, with every container still showing "Up".
+        # So we also restart any dependent whose StartedAt predates gluetun's
+        # current StartedAt. Timestamps are compared at whole-second granularity
+        # (the first 19 chars of RFC3339 are fixed-width, so lexical order ==
+        # chronological order; sub-second fields are RFC3339Nano-trimmed and not
+        # safe to compare as strings).
+        before() { [ "$$1" != "$$2" ] && [ "$$(printf '%s\n%s\n' "$$1" "$$2" | sort | head -n1)" = "$$1" ]; }
+        recover() {
+          g=$$(docker inspect -f '{{.State.StartedAt}}' gluetun 2>/dev/null) || return
+          g=$$(printf %s "$$g" | cut -c1-19)
+          for c in $$(docker ps -a --filter label=gluetun.dependent=true -q); do
+            state=$$(docker inspect -f '{{.State.Status}}' "$$c")
+            started=$$(docker inspect -f '{{.State.StartedAt}}' "$$c" | cut -c1-19)
+            if [ "$$state" = exited ] || before "$$started" "$$g"; then
+              name=$$(docker inspect -f '{{.Name}}' "$$c")
+              echo "gluetun-recover: restarting$$name (state=$$state, stale netns)"
+              # docker restart only works after a gluetun RESTART (same container
+              # ID). After a gluetun RECREATE the dependent's HostConfig still
+              # points at the old ID and restart fails with "joining network
+              # namespace ... No such container" — only a compose-level recreate
+              # of the dependent can fix that, and this watcher can't run
+              # compose. Log loudly instead of failing silently.
+              docker restart "$$c" || echo "gluetun-recover: FAILED to restart$$name — if gluetun was RECREATED (not restarted), run: docker compose -f docker-compose.arr-stack.yml up -d --force-recreate $${name#/}"
+            fi
+          done
+        }
+        # Recover anything already dead/stale when this watcher (re)starts.
+        recover
+        # Then react whenever gluetun's VPN tunnel comes back healthy.
+        docker events --filter container=gluetun --filter event=health_status \
+          --format '{{.Action}}' | while read -r action; do
+            case "$$action" in
+              *unhealthy*) : ;;        # ignore the unhealthy transition
+              *healthy*)   recover ;;  # tunnel is back — revive dead dependents
+            esac
+          done
+
+  # ═══════════════════════════════════════════════════════════════════════════
   # UPTIME KUMA - Monitoring dashboard. Shows health of all your services.
   # Access: uptime.lan | NAS_IP:3001 (LAN-only, use WireGuard for remote)
   # ═══════════════════════════════════════════════════════════════════════════
   uptime-kuma:
-    image: louislam/uptime-kuma:2
+    image: louislam/uptime-kuma:2.5.4
     container_name: uptime-kuma
+    <<: *default-security
+    cap_add:
+      - CHOWN           # Create subdirs in data volume on first run
+      - DAC_OVERRIDE    # Write to root-owned volume directories
+      - FOWNER          # Set ownership on created files
+    dns:
+      - 172.20.0.5  # Pi-hole, so .lan domains resolve (e.g. homeassistant.lan notifications)
     restart: always
     ports:
       - "3001:3001"  # Local network access only
     environment:
-      - TZ=${TZ:-Europe/London}
+      - TZ=${TZ}
     networks:
       arr-stack:
         ipv4_address: 172.20.0.13  # For monitoring other containers
@@ -85,8 +198,12 @@ services:
   # Note: Re-indexes daily at 4am. Manual: docker restart duc
   # ═══════════════════════════════════════════════════════════════════════════
   duc:
-    image: mkoestler/duc-service:latest
+    image: mkoestler/duc-service:v1.1.0
     container_name: duc
+    <<: *default-security
+    cap_add:
+      - CHOWN           # Nginx chown on startup
+      - DAC_OVERRIDE    # Write to root-owned volume directories
     networks:
       arr-stack:
         ipv4_address: 172.20.0.14
@@ -96,25 +213,132 @@ services:
     ports:
       - "8838:80"                      # Local network access only
     environment:
-      - TZ=${TZ:-Europe/London}
+      - TZ=${TZ}
       - SCHEDULE=0 4 * * *             # Re-index daily at 4am
     restart: always
     logging: *default-logging
 
+
   # ═══════════════════════════════════════════════════════════════════════════
-  # QBIT-SCHEDULER - Pauses torrents overnight to let disks spin down.
-  # Default: pause at 20:00, resume at 06:00. No web UI.
+  # BESZEL - Lightweight server monitoring with historical data and alerts.
+  # Access: beszel.lan | NAS_IP:8090 (LAN-only, use WireGuard for remote)
   # ═══════════════════════════════════════════════════════════════════════════
-  qbit-scheduler:
-    build: ./scripts/qbit-scheduler
-    container_name: qbit-scheduler
-    environment:
-      - TZ=${TZ:-Europe/London}
-      - QBIT_HOST=${NAS_IP:-192.168.1.100}
-      - QBIT_PORT=8085
-      - QBIT_USER=${QBIT_USER:-admin}
-      - QBIT_PASS=${QBIT_PASSWORD}
-      - PAUSE_HOUR=${QBIT_PAUSE_HOUR:-20}
-      - RESUME_HOUR=${QBIT_RESUME_HOUR:-6}
+  beszel:
+    image: henrygd/beszel:0.19
+    container_name: beszel
+    <<: *default-security
+    cap_add:
+      - CHOWN           # Create data dirs on first run
+      - DAC_OVERRIDE    # Write to root-owned volume directories
     restart: always
+    ports:
+      - "8090:8090"
+    networks:
+      arr-stack:
+        ipv4_address: 172.20.0.15
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - beszel-data:/beszel_data
+    environment:
+      - TZ=${TZ}
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "/beszel", "health", "--url", "http://localhost:8090"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  beszel-agent:
+    image: henrygd/beszel-agent:0.19
+    container_name: beszel-agent
+    <<: *default-security
+    restart: always
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - PORT=45876
+      - KEY=${BESZEL_KEY}
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "/agent", "health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # DIUN - Docker Image Update Notifier. Watches running containers and sends
+  # webhook notifications when newer image versions are available on registries.
+  # No web UI. Configure DIUN_WEBHOOK_URL in .env to receive alerts.
+  # ═══════════════════════════════════════════════════════════════════════════
+  diun:
+    image: crazymax/diun:4.33.0
+    container_name: diun
+    <<: *default-security
+    cap_add:
+      - CHOWN           # Create data dirs on first run
+      - DAC_OVERRIDE    # Write to root-owned volume directories
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - diun-data:/data
+    networks:
+      arr-stack:
+        ipv4_address: 172.20.0.16
+    environment:
+      - TZ=${TZ}
+      - DIUN_WATCH_WORKERS=5
+      - DIUN_WATCH_SCHEDULE=${DIUN_SCHEDULE:-0 6 * * *}
+      - DIUN_PROVIDERS_DOCKER=true
+      - DIUN_PROVIDERS_DOCKER_WATCHBYDEFAULT=true
+      # Watch the whole repo, not just the pinned tag: without WATCHREPO diun
+      # only reports digest changes of e.g. :v3.3.0 itself, so a new v3.4.1
+      # release never triggers a notification (this is how the Seerr v3.4.x
+      # releases went unnoticed). INCLUDETAGS limits the scan to plain semver
+      # tags so nightlies/betas/rc tags stay silent. $$ = literal $ (compose
+      # interpolation escape). SORTTAGS+MAXTAGS cap each scan at the 25 highest
+      # semver tags per repo — without the cap diun fetches manifests for EVERY
+      # matching tag of all ~24 repos daily (registry rate-limit bait).
+      #
+      # NOTE: diun's "first check" (which suppresses notifications) is tracked
+      # per REPO, not per tag — enabling WATCHREPO against an existing /data
+      # DB notifies for every historical tag it hasn't seen (hundreds). When
+      # turning this on, move the old DB aside first so the first scan primes
+      # silently:  mv /data/diun.db /data/diun.db.pre-watchrepo  (then restart)
+      - DIUN_DEFAULTS_WATCHREPO=true
+      - DIUN_DEFAULTS_INCLUDETAGS=^v?\d+\.\d+\.\d+$$
+      - DIUN_DEFAULTS_SORTTAGS=semver
+      - DIUN_DEFAULTS_MAXTAGS=25
+      - DIUN_NOTIF_WEBHOOK_ENDPOINT=${DIUN_WEBHOOK_URL}
+      - DIUN_NOTIF_WEBHOOK_METHOD=POST
+      - DIUN_NOTIF_WEBHOOK_HEADERS_0_NAME=Content-Type
+      - DIUN_NOTIF_WEBHOOK_HEADERS_0_VALUE=application/json
+    logging: *default-logging
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CONFIGARR - Syncs TRaSH Guides quality profiles and custom formats to
+  # Sonarr/Radarr. One-shot job: runs once and exits. No web UI.
+  # Run manually: docker compose -f docker-compose.utilities.yml run --rm configarr
+  # Dry run first: docker compose -f docker-compose.utilities.yml run --rm -e DRY_RUN=true configarr
+  # ═══════════════════════════════════════════════════════════════════════════
+  configarr:
+    image: ghcr.io/raydak-labs/configarr:1.30.2
+    container_name: configarr
+    <<: *default-security
+    cap_add:
+      - CHOWN           # Create repo dirs on first run
+      - DAC_OVERRIDE    # Write to root-owned volume directories
+    restart: "no"
+    networks:
+      - arr-stack
+    volumes:
+      - ./configarr/config.yml:/app/config/config.yml:ro
+      - configarr-repos:/app/repos
+    environment:
+      - TZ=${TZ}
+      - SONARR_API_KEY=${SONARR_API_KEY}
+      - RADARR_API_KEY=${RADARR_API_KEY}
     logging: *default-logging

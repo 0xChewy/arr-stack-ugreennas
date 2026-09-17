@@ -1,5 +1,5 @@
 #!/bin/bash
-# Pre-commit hook for arr-stack-ugreennas
+# Pre-commit hook for ultimate-arr-stack
 # Validates commits for security and consistency
 #
 # Installation: ./setup-hooks.sh
@@ -15,17 +15,15 @@ while [[ -L "$SCRIPT_PATH" ]]; do
     [[ "$SCRIPT_PATH" != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
 done
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$SCRIPT_DIR/..")"
 
 # Color output (disabled if not interactive)
 if [[ -t 1 ]]; then
     RED='\033[0;31m'
     GREEN='\033[0;32m'
-    YELLOW='\033[1;33m'
     BLUE='\033[0;34m'
     NC='\033[0m'
 else
-    RED='' GREEN='' YELLOW='' BLUE='' NC=''
+    RED='' GREEN='' BLUE='' NC=''
 fi
 
 # Source common library first (caches NAS config for all checks)
@@ -36,14 +34,16 @@ source "$SCRIPT_DIR/lib/check-secrets.sh"
 source "$SCRIPT_DIR/lib/check-env-vars.sh"
 source "$SCRIPT_DIR/lib/check-yaml-syntax.sh"
 source "$SCRIPT_DIR/lib/check-conflicts.sh"
-source "$SCRIPT_DIR/lib/check-compose-drift.sh"
 source "$SCRIPT_DIR/lib/check-hardcoded-domain.sh"
 source "$SCRIPT_DIR/lib/check-env-backup.sh"
 source "$SCRIPT_DIR/lib/check-uptime-monitors.sh"
+source "$SCRIPT_DIR/lib/check-dns-duplicates.sh"
+source "$SCRIPT_DIR/lib/check-domains.sh"
+source "$SCRIPT_DIR/lib/check-image-versions.sh"
+source "$SCRIPT_DIR/lib/check-doc-links.sh"
 
 # Track results
 ERRORS=0
-WARNINGS=0
 
 echo ""
 echo -e "${BLUE}Pre-commit validation${NC}"
@@ -75,9 +75,11 @@ echo ""
 echo -e "${BLUE}2. Checking environment variable documentation...${NC}"
 if check_env_vars; then
     echo -e "    ${GREEN}OK${NC}: All compose variables documented"
-fi
-# Note: check_env_vars outputs its own errors
-if [[ $? -ne 0 ]]; then
+else
+    # check_env_vars outputs its own errors. This MUST be an else branch: a
+    # `[[ $? -ne 0 ]]` after the `fi` reads the exit status of the *if
+    # statement*, which is 0 whenever the condition was false and there is no
+    # else — so the check never once blocked a commit.
     ((ERRORS++))
 fi
 echo ""
@@ -86,9 +88,10 @@ echo ""
 # CHECK 3: YAML Syntax (BLOCKS)
 # ==========================================
 echo -e "${BLUE}3. Checking YAML syntax...${NC}"
-if check_yaml_syntax; then
-    echo -e "    ${GREEN}OK${NC}: YAML syntax valid"
-else
+# check_yaml_syntax prints its own status line, including which validator it
+# used and whether it in fact validated anything. A blanket "OK" here used to
+# be printed even when the check had silently done nothing at all.
+if ! check_yaml_syntax; then
     ((ERRORS++))
 fi
 echo ""
@@ -105,31 +108,66 @@ fi
 echo ""
 
 # ==========================================
-# CHECK 5: Compose Drift (WARNS)
+# CHECK 5: Hardcoded Domain (WARNS)
 # ==========================================
-echo -e "${BLUE}5. Checking Jellyfin/Plex consistency...${NC}"
-check_compose_drift
-echo ""
-
-# ==========================================
-# CHECK 6: Hardcoded Domain (WARNS)
-# ==========================================
-echo -e "${BLUE}6. Checking for hardcoded domain...${NC}"
+echo -e "${BLUE}5. Checking for hardcoded domain...${NC}"
 check_hardcoded_domain
 echo ""
 
 # ==========================================
-# CHECK 7: NAS .env Backup Sync (WARNS)
+# CHECK 6: NAS .env Backup Sync (WARNS)
 # ==========================================
-echo -e "${BLUE}7. Checking .env.nas.backup sync...${NC}"
+echo -e "${BLUE}6. Checking .env.nas.backup sync...${NC}"
 check_env_backup
 echo ""
 
 # ==========================================
-# CHECK 8: Uptime Kuma Monitors (WARNS)
+# CHECK 7: Uptime Kuma Monitors (WARNS)
 # ==========================================
-echo -e "${BLUE}8. Checking Uptime Kuma monitors...${NC}"
+echo -e "${BLUE}7. Checking Uptime Kuma monitors...${NC}"
 check_uptime_monitors
+echo ""
+
+# ==========================================
+# CHECK 8: DNS Duplicates (WARNS)
+# ==========================================
+echo -e "${BLUE}8. Checking for duplicate .lan domains...${NC}"
+check_dns_duplicates
+echo ""
+
+# ==========================================
+# CHECK 9: Domain Accessibility (WARNS)
+# ==========================================
+echo -e "${BLUE}9. Checking domain accessibility...${NC}"
+check_domains
+echo ""
+
+# ==========================================
+# CHECK 10: Image Version Staleness (WARNS)
+# ==========================================
+echo -e "${BLUE}10. Checking for image updates...${NC}"
+# Timeout after 30s to prevent slow registries from blocking commits
+_timeout_cmd=""
+command -v timeout &>/dev/null && _timeout_cmd="timeout"
+command -v gtimeout &>/dev/null && _timeout_cmd="gtimeout"
+if [[ -n "$_timeout_cmd" ]]; then
+    $_timeout_cmd 30 bash -c "source '$SCRIPT_DIR/lib/common.sh'; source '$SCRIPT_DIR/lib/check-image-versions.sh'; check_image_versions" 2>/dev/null || {
+        [[ $? -eq 124 ]] && echo "    SKIP: Registry checks timed out (30s)"
+    }
+else
+    check_image_versions
+fi
+echo ""
+
+# ==========================================
+# CHECK 11: Documentation Links (BLOCKS)
+# ==========================================
+echo -e "${BLUE}11. Checking documentation links...${NC}"
+if check_doc_links; then
+    echo -e "    ${GREEN}OK${NC}: All internal links valid"
+else
+    ((ERRORS++))
+fi
 echo ""
 
 # ==========================================

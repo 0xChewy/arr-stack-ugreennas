@@ -7,11 +7,10 @@ For contributors, forks, and anyone wanting to understand the project internals.
 ## Project Structure
 
 ```
-arr-stack-ugreennas/
+ultimate-arr-stack/
 ├── docker-compose.traefik.yml      # Traefik reverse proxy
 ├── docker-compose.arr-stack.yml    # Main media stack (Jellyfin)
 ├── docker-compose.utilities.yml    # Optional utilities (monitoring, disk usage)
-├── docker-compose.plex-arr-stack.yml  # Plex variant (untested)
 ├── docker-compose.cloudflared.yml  # Cloudflare tunnel
 ├── traefik/                        # Traefik configuration
 │   ├── traefik.yml.example         # Static config template (copy & customize)
@@ -19,11 +18,12 @@ arr-stack-ugreennas/
 │   └── dynamic/
 │       ├── tls.yml                 # TLS settings (generic, no customization needed)
 │       ├── vpn-services.yml.example    # Jellyfin routing template
-│       ├── vpn-services-plex.yml.example  # Plex routing template
 │       ├── vpn-services.yml        # Your routing config (gitignored)
 │       └── utilities.yml           # Utilities routing (generic)
 ├── .env.example                    # Environment template
 ├── .env                            # Your configuration (gitignored)
+├── .env.e2e.example                # E2E test env template
+├── .env.e2e                        # Your E2E test config (gitignored)
 ├── docs/                           # Documentation
 │   ├── SETUP.md                    # Complete setup guide
 │   ├── REFERENCE.md                # Quick reference (IPs, ports, commands)
@@ -51,7 +51,7 @@ Internet → Cloudflare Tunnel (or Router Port Forward 80→8080, 443→8443)
                             ▼
            Traefik (listening on 8080/8443 on NAS)
                             │
-                            ├─► Jellyfin, Jellyseerr, Bazarr (Direct)
+                            ├─► Jellyfin, Seerr, Bazarr (Direct)
                             │
                             └─► Gluetun (VPN Gateway)
                                     │
@@ -76,7 +76,7 @@ This project uses **separate Docker Compose files** for each layer:
 - Easier troubleshooting with isolated logs
 - Optional components can be skipped
 
-**Deployment order**: Traefik first (creates network) → cloudflared → arr-stack → utilities (optional).
+**Deployment order**: arr-stack first (creates network) → Traefik → cloudflared → utilities (optional).
 
 ### Storage Structure
 
@@ -92,7 +92,7 @@ This project uses **separate Docker Compose files** for each layer:
         └── cloudflared/   # User-edited (bind mount)
 ```
 
-**Service data** (Sonarr, Radarr, Jellyfin, etc.) is stored in Docker named volumes (e.g., `arr-stack_sonarr-config`), not in the repo directory. Use `scripts/backup-volumes.sh` to back them up.
+**Service data** (Sonarr, Radarr, Jellyfin, etc.) is stored in Docker named volumes (e.g., `arr-stack_sonarr-config`), not in the repo directory. Use `scripts/arr-backup.sh` to back them up.
 
 ---
 
@@ -127,6 +127,28 @@ The actual `.yml` files are gitignored, so:
 
 ---
 
+## Continuous Integration
+
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`. It does not replace the rule that every change is tested on the NAS before it reaches `main` — nothing in CI can reach the stack — it front-loads the checks that don't need it, and it is the only gate a contributor without the local hooks passes through.
+
+| job | what it runs | blocks merge? |
+|---|---|---|
+| `bats suite` | `tests/run-tests.sh`: compose validity, ports and IPs, secrets hygiene, env documentation, doc links, container posture, shellcheck at `error`, the unit tests for `configure-apps.sh`, and the architecture rules (download clients inside gluetun's namespace, project names, the `arr-stack` subnet pins). The pre-commit hook runs its own eleven checks; the two overlap in intent, and the bats suite drives several of the hook's check functions directly. Registry-tag checks are guaranteed a network here. | yes |
+| `lint` | actionlint over the workflow, hadolint over the devcontainer Dockerfile, shellcheck at `warning` (advisory — printed, never fails) | yes, except the advisory step |
+| `supply chain` | syft SBOM (SPDX + CycloneDX, uploaded as an artifact); trivy over the tree for vulnerabilities, misconfiguration and secrets at HIGH/CRITICAL | yes |
+| `nightly` | trivy image scan over every image the compose files pin — a report per image and a count table in the run summary (an image that could not be scanned is a row that says so); and a `docker build` of the devcontainer Dockerfile, which nothing else builds | never — diagnostic |
+
+Run the blocking checks locally before pushing: `./tests/run-tests.sh` is the whole `bats` job. The lint and supply-chain steps each run one digest-pinned image with the flags shown in the workflow — copy the step's `docker run` line to reproduce it. [`docs/QUALITY-CONTROL-MAP.md`](docs/QUALITY-CONTROL-MAP.md) says which surface covers which capability, and where nothing does.
+
+### Pinning policy
+
+Everything that can float is pinned, and the pin lives next to a human-readable version so a bump is one visible line:
+
+- **Compose images** — exact tags (`lscr.io/linuxserver/sonarr:4.0.15`), never `latest`; `tests/compose-validation.bats` fails on `latest` or an untagged image and checks each tag exists on its registry. A major-only tag such as `louislam/uptime-kuma:2` passes the test but still floats — prefer the full version. Renovate opens the bumps; every bump is tested on the NAS before merge.
+- **GitHub Actions** — commit SHAs with the version in a trailing comment (`actions/checkout@3d3c42e… # v7.0.1`). Renovate keeps them current (`helpers:pinGitHubActionDigests`).
+- **CI tool images** — tag plus digest (`aquasec/trivy:0.74.0@sha256:…`). Bumped by hand, digest and comment together: `docker buildx imagetools inspect <image> --format '{{.Manifest.Digest}}'`.
+- **The devcontainer** — deliberately tracks unpinned apt and npm packages; it is a development box, not a deployment. hadolint's version-pinning rules are ignored for it in `.hadolint.yaml`, with the reason.
+
 ## Pre-commit Hooks
 
 This repo includes validation hooks that run on `git commit`:
@@ -137,7 +159,6 @@ This repo includes validation hooks that run on `git commit`:
 | Env vars | Yes | Ensures compose `${VAR}` are documented in `.env.example` |
 | YAML syntax | Yes | Catches invalid YAML before it breaks deployment |
 | Port/IP conflicts | Yes | Detects duplicate ports or static IPs |
-| Compose drift | Warn | Flags Jellyfin/Plex inconsistencies |
 | Hardcoded domain | Block | Detects your hostname in tracked files (leaks identity) |
 | Hardcoded domain | Warn | Detects your domain in tracked files (may be intentional) |
 | NAS .env backup | Warn | Checks `.env.nas.backup` matches NAS |
@@ -173,7 +194,7 @@ rm .git/hooks/pre-commit
 
 ### SSH-based Checks (NAS .env backup, Uptime monitors)
 
-The last two checks require SSH access to your NAS. They gracefully skip when:
+Three checks require SSH — the `.env` backup sync, the Uptime Kuma monitors and duplicate `.lan` domains — and the domain-accessibility check needs the NAS config but not SSH; all access to your NAS. They gracefully skip when:
 - NAS is not reachable (ping fails)
 - SSH port is blocked/closed
 - SSH authentication fails
@@ -194,11 +215,86 @@ The last two checks require SSH access to your NAS. They gracefully skip when:
 
 3. **Alternative: password auth** via `NAS_SSH_PASS` env var (requires `sshpass` installed)
 
+## Releases
+
+### The flow, end to end (branch-first — prevents version drift)
+
+Every version-changing release follows this order. Doing it as one unbroken flow is what stops the CHANGELOG, tags, and GitHub releases from drifting out of sync with each other (which they have before — e.g. 1.7.19/1.7.20 shipped in commit messages with no CHANGELOG entry or release).
+
+1. **Branch.** Make the change on a feature branch (`fix/…`, `chore/…`), commit, push.
+2. **CHANGELOG entry, same branch.** Add a `## [X.Y.Z] - YYYY-MM-DD` section. This is not optional — a version bump with no CHANGELOG entry is an incomplete release. ⚠️ **Do NOT paste your real domain or NAS hostname into the entry** (e.g. `jellyfin.yourhost.cc`) — the pre-commit "Hardcoded domain" check **blocks** the commit on the hostname. Describe verification generically ("Jellyfin returned HTTP 302 through the tunnel"), not by URL.
+3. **Deploy + verify on the NAS from the branch** (see CLAUDE.md → "Deploying to the NAS"): `git checkout <branch>` on the NAS, recreate the affected service(s) via compose, run the Pre-release Checklist below. Back up the config volume first for any service with a DB migration (Pi-hole, the \*arrs).
+4. **Merge to `main`, push, sync the NAS** (`git checkout main && git pull`).
+5. **Publish:** `gh release create vX.Y.Z --title vX.Y.Z --notes "…"` (this also creates the tag). A "tag" always means a full GitHub release with notes — never a bare `git tag`.
+
+### Pre-release Checklist
+
+**Every release MUST pass these checks before merging to `main` and tagging. No exceptions.**
+
+1. **Run all BATS tests** (includes image tag validation):
+   ```bash
+   tests/bats-core/bin/bats tests/
+   ```
+
+2. **Verify all image tags are pullable on the NAS** — a full tear-down and pull:
+   ```bash
+   # SSH to the NAS, then for each compose file being released:
+   cd $NAS_STACK_DIR
+   docker compose -f docker-compose.arr-stack.yml pull
+   docker compose -f docker-compose.traefik.yml pull
+   docker compose -f docker-compose.utilities.yml pull
+   ```
+   Every image must pull successfully. Cached images mask bad tags — a fresh `pull` is the only way to be sure.
+
+3. **Bring the stack up** and verify services start:
+   ```bash
+   docker compose -f docker-compose.traefik.yml up -d
+   docker compose -f docker-compose.arr-stack.yml up -d
+   # Check all containers are healthy
+   docker ps --format 'table {{.Names}}\t{{.Status}}'
+   ```
+
+4. **Run E2E tests** — verify all UIs load and API responses are correct:
+   ```bash
+   npm run test:e2e
+   ```
+   This logs into each service, takes screenshots of every dashboard, and asserts root folders and media libraries are present. All 14 tests must pass. Screenshots are saved to `tests/e2e/screenshots/` for visual review.
+
+### Tagging and Publishing
+
+**Normal path — publish a new release** (creates the tag and the GitHub release together):
+
+```bash
+gh release create vX.Y.Z --title "vX.Y.Z" --notes "$(cat <<'EOF'
+## Changed
+- **Service** old → new. One line on how it was verified on the NAS.
+EOF
+)"
+```
+
+Keep the notes hostname-free (same rule as the CHANGELOG). The release notes are the CHANGELOG entry, lightly trimmed.
+
+**Edge case — moving an existing tag.** Force-pushing a tag resets the GitHub release to Draft status. After moving a tag to a new commit:
+
+```bash
+# Move tag to new commit
+git tag -d v1.x && git tag v1.x
+git push origin :refs/tags/v1.x && git push origin v1.x
+
+# REQUIRED: Fix the release status (force-push sets it to Draft)
+gh release edit v1.x --draft=false --latest
+```
+
+Without the `gh release edit` step, the release stays Draft and won't show as Latest.
+
+---
+
 ## Scripts Structure
 
 ```
 scripts/
-├── backup-volumes.sh       # Backup all Docker named volumes
+├── arr-backup.sh           # Backup all Docker named volumes
+├── fix-radarr-paths.sh     # Fix Radarr paths after TRaSH naming organize
 ├── pre-commit              # Main hook (symlinked from .git/hooks/)
 └── lib/
     ├── common.sh               # Shared functions (NAS config, SSH, file scanning)
@@ -206,10 +302,14 @@ scripts/
     ├── check-env-vars.sh       # Ensure compose vars are documented
     ├── check-yaml-syntax.sh    # Validate YAML syntax
     ├── check-conflicts.sh      # Detect port/IP conflicts
-    ├── check-compose-drift.sh  # Compare Jellyfin/Plex variants
     ├── check-hardcoded-domain.sh  # Detect domain/hostname in tracked files
     ├── check-env-backup.sh     # Compare .env.nas.backup with NAS
-    └── check-uptime-monitors.sh   # Verify Uptime Kuma monitors
+    ├── check-uptime-monitors.sh   # Verify Uptime Kuma monitors
+    ├── check-dns-duplicates.sh # Detect duplicate .lan domains
+    ├── check-domains.sh        # Verify domain accessibility
+    ├── check-image-versions.sh # Check for stale Docker image tags
+    ├── configure-helpers.sh    # HTTP layer + output helpers for configure-apps.sh
+    └── bazarr-language-plan.py # Decides Bazarr's subtitle-profile changes (pure; unit-tested)
 ```
 
 The `common.sh` library provides shared functions used by all checks:

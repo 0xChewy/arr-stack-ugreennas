@@ -3,13 +3,15 @@
 # Traefik routes by Host header to correct service
 #
 # Usage (on NAS):
-#   sed "s/TRAEFIK_LAN_IP/10.10.0.11/g" pihole/02-local-dns.conf.example > pihole/02-local-dns.conf
-#   docker exec pihole pihole reloaddns
+#   sed "s/TRAEFIK_LAN_IP/192.168.1.11/g" pihole/dnsmasq.d/02-local-dns.conf.example > pihole/dnsmasq.d/02-local-dns.conf
+#   docker restart pihole
 #
-# Note: Replace 10.10.0.11 with your chosen TRAEFIK_LAN_IP
+# Note: Replace 192.168.1.11 with your chosen TRAEFIK_LAN_IP
+# Note: `pihole reloaddns` does NOT pick up bind-mount changes — use `docker restart pihole`
 
 # Media services
 address=/jellyfin.lan/TRAEFIK_LAN_IP
+address=/seerr.lan/TRAEFIK_LAN_IP
 address=/jellyseerr.lan/TRAEFIK_LAN_IP
 address=/jellyseer.lan/TRAEFIK_LAN_IP
 
@@ -26,11 +28,15 @@ address=/sabnzbd.lan/TRAEFIK_LAN_IP
 # Infrastructure
 address=/traefik.lan/TRAEFIK_LAN_IP
 address=/pihole.lan/TRAEFIK_LAN_IP
-address=/wg.lan/TRAEFIK_LAN_IP
 
 # Utilities
 address=/uptime.lan/TRAEFIK_LAN_IP
 address=/duc.lan/TRAEFIK_LAN_IP
+address=/beszel.lan/TRAEFIK_LAN_IP
 
-# Direct IP (not routed via Traefik)
-address=/flaresolverr.lan/172.20.0.10
+# Proper IPv6 response for .lan domains (no real IPv6 addresses needed).
+# Returns :: (unspecified) instead of NXDOMAIN for AAAA queries. This is the
+# standard dnsmasq approach for IPv4-only local domains. Required because
+# Alpine/musl-based containers (e.g. Gluetun) treat AAAA NXDOMAIN as a hard
+# failure — even when the A (IPv4) record resolves fine.
+address=/lan/::

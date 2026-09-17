@@ -1,0 +1,46 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "timezone": "Europe/London",
+  "schedule": ["before 9am on Monday"],
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "Group all LinuxServer.io image updates",
+      "matchDatasources": ["docker"],
+      "matchPackagePatterns": ["^lscr\\.io/linuxserver/"],
+      "groupName": "LinuxServer.io images"
+    },
+    {
+      "description": "Group infrastructure images (Gluetun, Traefik, Cloudflared, Pi-hole)",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": [
+        "qmcgaw/gluetun",
+        "traefik",
+        "cloudflare/cloudflared",
+        "pihole/pihole"
+      ],
+      "groupName": "Infrastructure images"
+    },
+    {
+      "description": "Group monitoring/utility images",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": [
+        "henrygd/beszel",
+        "henrygd/beszel-agent",
+        "louislam/uptime-kuma",
+        "crazymax/diun",
+        "qmcgaw/deunhealth",
+        "mkoestler/duc-service"
+      ],
+      "groupName": "Utility images"
+    },
+    {
+      "description": "Auto-merge patch updates for stable media services",
+      "matchDatasources": ["docker"],
+      "matchPackagePatterns": ["^lscr\\.io/linuxserver/"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    }
+  ]
+}

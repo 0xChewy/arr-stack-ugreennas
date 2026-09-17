@@ -1,13 +1,13 @@
 # Local .lan domain routing (port-free access)
 #
 # How it works:
-# 1. Pi-hole DNS resolves *.lan → TRAEFIK_LAN_IP (macvlan, e.g. 10.10.0.11)
+# 1. Pi-hole DNS resolves *.lan → TRAEFIK_LAN_IP (macvlan, e.g. 192.168.1.11)
 # 2. Browser requests http://sonarr.lan → Traefik on port 80 (macvlan IP)
 # 3. Traefik matches Host header → routes to correct service:port
 #
-# Result: http://sonarr.lan instead of http://10.10.0.10:8989
+# Result: http://sonarr.lan instead of http://192.168.1.10:8989
 #
-# Note: Requires Traefik macvlan setup (see docs/SETUP.md section 5.11)
+# Note: Requires Traefik macvlan setup (see docs/LOCAL-DNS.md)
 
 http:
   routers:
@@ -17,17 +17,23 @@ http:
       entryPoints: [web]
       service: jellyfin-lan
 
+    seerr-lan:
+      rule: "Host(`seerr.lan`)"
+      entryPoints: [web]
+      service: seerr-lan
+
+    # Legacy redirects (jellyseerr/jellyseer → seerr)
     jellyseerr-lan:
       rule: "Host(`jellyseerr.lan`)"
       entryPoints: [web]
-      service: jellyseerr-lan
+      middlewares: [jellyseerr-redirect]
+      service: seerr-lan
 
-    # Typo redirects (jellyseer -> jellyseerr)
     jellyseer-lan:
       rule: "Host(`jellyseer.lan`)"
       entryPoints: [web]
-      middlewares: [jellyseer-redirect]
-      service: jellyseerr-lan
+      middlewares: [jellyseerr-redirect]
+      service: seerr-lan
 
     # === *arr Stack (VPN-protected via Gluetun) ===
     sonarr-lan:
@@ -72,11 +78,6 @@ http:
       entryPoints: [web]
       service: pihole-lan
 
-    wg-lan:
-      rule: "Host(`wg.lan`)"
-      entryPoints: [web]
-      service: wg-lan
-
     # === Utilities ===
     uptime-lan:
       rule: "Host(`uptime.lan`)"
@@ -88,11 +89,16 @@ http:
       entryPoints: [web]
       service: duc-lan
 
+    beszel-lan:
+      rule: "Host(`beszel.lan`)"
+      entryPoints: [web]
+      service: beszel-lan
+
   middlewares:
-    jellyseer-redirect:
+    jellyseerr-redirect:
       redirectRegex:
-        regex: "^http://jellyseer[.]lan(.*)"
-        replacement: "http://jellyseerr.lan${1}"
+        regex: "^http://jellyseer{1,2}[.]lan(.*)"
+        replacement: "http://seerr.lan${1}"
         permanent: true
 
   services:
@@ -102,21 +108,23 @@ http:
         servers:
           - url: "http://172.20.0.4:8096"
 
-    jellyseerr-lan:
+    seerr-lan:
       loadBalancer:
         servers:
           - url: "http://172.20.0.8:5055"
 
-    # === *arr Stack (via Gluetun at 172.20.0.3) ===
+    # === *arr Stack ===
+    # Sonarr/Radarr now run on the arr-stack bridge with their own IPs
+    # (no longer behind Gluetun). Prowlarr stays behind Gluetun (172.20.0.3).
     sonarr-lan:
       loadBalancer:
         servers:
-          - url: "http://172.20.0.3:8989"
+          - url: "http://172.20.0.10:8989"
 
     radarr-lan:
       loadBalancer:
         servers:
-          - url: "http://172.20.0.3:7878"
+          - url: "http://172.20.0.11:7878"
 
     prowlarr-lan:
       loadBalancer:
@@ -145,11 +153,6 @@ http:
         servers:
           - url: "http://172.20.0.5:80"
 
-    wg-lan:
-      loadBalancer:
-        servers:
-          - url: "http://172.20.0.6:51821"
-
     # === Utilities ===
     uptime-lan:
       loadBalancer:
@@ -160,3 +163,8 @@ http:
       loadBalancer:
         servers:
           - url: "http://172.20.0.14:80"
+
+    beszel-lan:
+      loadBalancer:
+        servers:
+          - url: "http://172.20.0.15:8090"

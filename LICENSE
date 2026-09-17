@@ -1,0 +1,51 @@
+# Licensing
+
+Three things apply here, depending on what you're looking at. All of them are
+**noncommercial** — the difference is which instrument fits which material.
+
+## Code → PolyForm Noncommercial 1.0.0
+
+Full text: [LICENSE-code](LICENSE-code)
+
+Compose files, shell scripts, tests, hooks — anything executable or
+configuration.
+
+Creative Commons explicitly recommend against using CC licences for software:
+no patent grant, no source provisions, and "NonCommercial" is loosely defined
+for code. PolyForm Noncommercial is the same posture, drafted for software.
+
+## Documentation → CC BY-NC 4.0
+
+Full text: [LICENSE-docs](LICENSE-docs)
+
+Prose, guides, diagrams, README and everything under `docs/`. Creative Commons
+is the right instrument for writing.
+
+## Notes
+
+**This change is forward-only.** Copies already distributed under CC BY-NC 4.0
+— including every existing fork — keep those terms permanently. Nothing is
+withdrawn from anyone.
+
+**Contributors:** [@gncnpk](https://github.com/gncnpk) agreed to the relicence
+on 2026-08-15 (issue #20). [@eren-kemer](https://github.com/eren-kemer)'s
+contribution has no surviving lines, confirmed by `git blame`, so no agreement
+was needed.
+
+Four files were previously held back under CC BY-NC 4.0 because they were
+adapted from [leonardoazeredo/ultimate-arr-stack](https://github.com/leonardoazeredo/ultimate-arr-stack)
+and relicensing another author's work is not ours to do. Rather than assume
+consent from silence, those files — `tests/e2e/networking.spec.ts`,
+`tests/e2e/vpn-security.spec.ts`, `tests/e2e/helpers.ts` and
+`scripts/detect-vpn-zombies.sh` — were **reimplemented from their behaviour**
+and now carry no lines from that work. They are covered by `LICENSE-code` with
+everything else. The original remains credited in this repository's history,
+and the request in issue #20 is withdrawn rather than left hanging.
+
+**GitHub will report this repository as unlicensed.** Its detector recognises
+thirteen licences and includes neither PolyForm nor any NonCommercial CC
+variant. That's cosmetic — these files are what have legal effect.
+
+Individual software components deployed by this stack (Sonarr, Radarr,
+Jellyfin, and the rest) retain their own licences, which have nothing to do
+with this repository.
